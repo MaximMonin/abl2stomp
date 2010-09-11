@@ -16,25 +16,30 @@
 /*                             DEFINE VARIABLES                             */
 /*--------------------------------------------------------------------------*/
 
-DEFINE INPUT PARAMETER objConnection      AS Stomp.Connection NO-UNDO.
-DEFINE INPUT PARAMETER ipobjLogger        AS Stomp.Logger     NO-UNDO.
-DEFINE VARIABLE        lcFullResponseData AS LONGCHAR         NO-UNDO.
+DEFINE INPUT PARAMETER objConnection       AS Stomp.Connection NO-UNDO.
+DEFINE INPUT PARAMETER ipobjLogger         AS Stomp.Logger     NO-UNDO.
+DEFINE VARIABLE        lcFullResponseData  AS LONGCHAR         NO-UNDO.
+DEFINE VARIABLE        lcFullResponseData1 AS LONGCHAR         NO-UNDO.
+define variable        hSocket             AS HANDLE           NO-UNDO.
+hSocket = objConnection:hSocket.
 /*--------------------------------------------------------------------------*/
 /*                                PROCEDURES                                */
 /*--------------------------------------------------------------------------*/
 
 /* ReadSocketResponse: READS RESPONSE FROM SOCKET */
 PROCEDURE ReadSocketResponse:
-    DEFINE VARIABLE mResponseData      AS MEMPTR    NO-UNDO.
-    DEFINE VARIABLE iBytesAvailable    AS INTEGER   NO-UNDO.
-    DEFINE VARIABLE cResponseData      AS CHARACTER NO-UNDO.
-    DEFINE VARIABLE iStartReadPosition AS INTEGER   NO-UNDO.
-    DEFINE VARIABLE iResponseLength    AS INTEGER   NO-UNDO.
-     
-    SELF:SENSITIVE = NO.
-    ERROR-STATUS:ERROR = NO.
+  DEFINE VARIABLE mResponseData      AS MEMPTR    NO-UNDO.
+  DEFINE VARIABLE iBytesAvailable    AS INTEGER   NO-UNDO.
+  DEFINE VARIABLE cResponseData      AS CHARACTER NO-UNDO.
+  DEFINE VARIABLE iStartReadPosition AS INTEGER   NO-UNDO.
+  DEFINE VARIABLE iResponseLength    AS INTEGER   NO-UNDO.
 
-    iBytesAvailable = MINIMUM(SELF:GET-BYTES-AVAILABLE(), {&BUFFER_MAX}) NO-ERROR.
+  if SESSION:BATCH then
+    hSocket:SENSITIVE = NO.
+  ERROR-STATUS:ERROR = NO.
+
+  repeat:
+    iBytesAvailable = MINIMUM(hSocket:GET-BYTES-AVAILABLE(), {&BUFFER_MAX}) NO-ERROR.
 
     IF ERROR-STATUS:ERROR THEN
         ipobjLogger:writeError(1, "SocketReader: Getting bytes available").
@@ -48,7 +53,11 @@ PROCEDURE ReadSocketResponse:
         
         ERROR-STATUS:ERROR = NO.
     
-        SELF:READ(mResponseData, 1, iBytesAvailable, READ-EXACT-NUM) NO-ERROR.
+        def var state as logical.
+        state = hSocket:READ(mResponseData, 1, iBytesAvailable, READ-EXACT-NUM) NO-ERROR.
+        if state = false then
+            ipobjLogger:writeError(1, "SocketReader: Reading from socket error").
+
         
         IF ERROR-STATUS:ERROR THEN DO:
             ipobjLogger:writeError(1, "SocketReader: Reading from socket").
@@ -76,14 +85,23 @@ PROCEDURE ReadSocketResponse:
                 
                 ASSIGN
                     iStartReadPosition = iStartReadPosition + iResponseLength
-                    lcFullResponseData = lcFullResponseData  + cResponseData
+                    lcFullResponseData1 = lcFullResponseData1  + cResponseData
                     cResponseData      = "".
+
+                if length (lcFullResponseData1) > 1000000 then
+                do:
+                    lcFullResponseData = lcFullResponseData  + lcFullResponseData1.
+                    lcFullResponseData1 = "".
+                end.
                 
                 IF iStartReadPosition <= iBytesAvailable AND
                    GET-BYTE(mResponseData, iStartReadPosition) = 0 THEN DO:
+                    lcFullResponseData = lcFullResponseData  + lcFullResponseData1.
+
                     DEFINE VARIABLE objFrame AS Stomp.Frame NO-UNDO.
                     ASSIGN objFrame = NEW Stomp.Frame(INPUT lcFullResponseData, INPUT ipobjLogger).
                     lcFullResponseData = "".
+                    lcFullResponseData1 = "".
                     objConnection:routeFrame(objFrame).
                     DELETE OBJECT objFrame.
                 END.
@@ -94,7 +112,9 @@ PROCEDURE ReadSocketResponse:
             SET-SIZE(mResponseData) = 0.
         END. /* not ERROR-STATUS:ERROR */
     END. /* not ERROR-STATUS:ERROR */
+    if lcFullResponseData = "" and lcFullResponseData1 = "" then leave.
+  end.
     
-    SELF:SENSITIVE = YES.
+  hSocket:SENSITIVE = YES.
 
 END PROCEDURE. /* ReadSocketResponse */
