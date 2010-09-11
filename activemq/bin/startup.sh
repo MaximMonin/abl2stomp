@@ -1,0 +1,2 @@
+#sh
+activemq-admin start&
