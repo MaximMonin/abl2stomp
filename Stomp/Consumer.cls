@@ -26,6 +26,7 @@ CLASS Stomp.Consumer INHERITS Stomp.Queue:
     
     DEFINE PRIVATE VARIABLE iStatus         AS INTEGER             NO-UNDO.
     DEFINE PRIVATE VARIABLE cReceiptWaiting AS CHARACTER           NO-UNDO.
+    DEFINE PUBLIC  VARIABLE SubscribeHeader AS CHARACTER           NO-UNDO.
 
     DEFINE PRIVATE VARIABLE lReceiptProcOK  AS LOGICAL             NO-UNDO.
     
@@ -57,6 +58,10 @@ CLASS Stomp.Consumer INHERITS Stomp.Queue:
                                                                          INPUT iplClientAck,
                                                                          INPUT ipcSelector,
                                                                          INPUT objLogger).
+        define var i as integer.
+        do i = 1 to NUM-ENTRIES (SubscribeHeader, "|") by 2:
+          objSubscribeFrame:addHeaderData(ENTRY(i,SubscribeHeader, "|"), ENTRY(i + 1, SubscribeHeader, "|")).
+        end.
         /* Send to internal subscribe procedure */
         RETURN THIS-OBJECT:subscribe(INPUT objSubscribeFrame).
 	END METHOD.
@@ -68,6 +73,25 @@ CLASS Stomp.Consumer INHERITS Stomp.Queue:
         ASSIGN objSubscribeFrame = Stomp.FrameFactory:makeSubscribeFrame(INPUT THIS-OBJECT:cDestQueue,
                                                                          INPUT iplClientAck,
                                                                          INPUT objLogger).
+        define var i as integer.
+        do i = 1 to NUM-ENTRIES (SubscribeHeader, "|") by 2:
+          objSubscribeFrame:addHeaderData(ENTRY(i,SubscribeHeader, "|"), ENTRY(i + 1, SubscribeHeader, "|")).
+        end.
+        /* Send to internal subscribe procedure */
+        RETURN THIS-OBJECT:subscribe(INPUT objSubscribeFrame).
+	END METHOD.
+
+    METHOD PUBLIC LOGICAL subscribe(INPUT HeaderInfo as CHARACTER, INPUT iplClientAck AS LOGICAL):
+	    /* Create a subscribe Frame */
+        DEFINE VARIABLE objSubscribeFrame AS Stomp.Frame NO-UNDO.
+        ASSIGN objSubscribeFrame = Stomp.FrameFactory:makeSubscribeFrame(INPUT THIS-OBJECT:cDestQueue,
+                                                                         INPUT iplClientAck,
+                                                                         INPUT objLogger).
+        SubscribeHeader = HeaderInfo.
+        define var i as integer.
+        do i = 1 to NUM-ENTRIES (SubscribeHeader, "|") by 2:
+          objSubscribeFrame:addHeaderData(ENTRY(i,SubscribeHeader, "|"), ENTRY(i + 1, SubscribeHeader, "|")).
+        end.
         /* Send to internal subscribe procedure */
         RETURN THIS-OBJECT:subscribe(INPUT objSubscribeFrame).
 	END METHOD.
@@ -188,6 +212,15 @@ CLASS Stomp.Consumer INHERITS Stomp.Queue:
     /* Process MESSAGE frames from STOMP server.  Consumer should simply hand these to parent procedure for processing. */
     METHOD PUBLIC OVERRIDE VOID processMessage(INPUT ipobjFrameMsg AS Stomp.Frame):
         IF THIS-OBJECT:isSubscribed() THEN DO:
+            objLogger:writeEntry(2, "Consumer on " + cDestQueue + ": Received a message; routing it" +
+                                    " to handling procedure").
+            /* Send message up to client procedure to properly handle it */
+            IF VALID-HANDLE(hParentProcess) THEN
+                RUN VALUE(cParentProcName) 
+                    IN hParentProcess(ipobjFrameMsg).
+        END.
+        ELSE DO:
+            objLogger:writeError(2, "Consumer on " + cDestQueue + ": Received message before subscription! Process it anyway!!!").
             objLogger:writeEntry(2, "Consumer on " + cDestQueue + ": Received a message; routing it" +
                                     " to handling procedure").
             /* Send message up to client procedure to properly handle it */
