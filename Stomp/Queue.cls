@@ -53,19 +53,42 @@ CLASS Stomp.Queue:
         IF objConnection EQ ? THEN
             RETURN FALSE.
         /* Register the Queue with the Connection */
-		IF NOT objConnection:setQueue(THIS-OBJECT) THEN DO:
+	IF NOT objConnection:setQueue(THIS-OBJECT) THEN DO:
             DELETE OBJECT objConnection.
             RETURN FALSE.
         END.
         /* Connect to server holding target queue */
         RETURN objConnection:connect().
     END METHOD.
-    
+
+    METHOD PUBLIC LOGICAL connect(INPUT ipcServer   AS CHARACTER,
+                                  INPUT ipiPort     AS INTEGER,
+                                  INPUT ipcUsername AS CHARACTER,
+                                  INPUT ipcPassword AS CHARACTER,
+                                  INPUT Client      AS CHARACTER):
+        ASSIGN objConnection = NEW Stomp.Connection(objLogger,
+                                                    ipcServer,
+                                                    ipiPort,
+                                                    ipcUsername,
+                                                    ipcPassword, 
+                                                    Client).
+        IF objConnection EQ ? THEN
+            RETURN FALSE.
+        /* Register the Queue with the Connection */
+	IF NOT objConnection:setQueue(THIS-OBJECT) THEN 
+        DO:
+            DELETE OBJECT objConnection.
+            RETURN FALSE.
+        END.
+        /* Connect to server holding target queue */
+        RETURN objConnection:connect().
+    END METHOD.
+
 
     /* Disconnect the queue object from the STOMP server */
     METHOD PUBLIC LOGICAL disconnect():
-        IF objConnection NE ? AND
-           NOT objConnection:isConnected() THEN
+        IF objConnection NE ? /* AND
+           NOT objConnection:isConnected() */ THEN
             RETURN objConnection:disconnect().
         ELSE DO:
             objLogger:writeError(3, "Queue object disconnect() method called, but Connection object either " + 
