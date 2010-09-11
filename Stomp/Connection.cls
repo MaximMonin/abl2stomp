@@ -23,10 +23,11 @@ CLASS Stomp.Connection:
 	DEFINE PRIVATE VARIABLE iPort                 AS INTEGER   NO-UNDO.
 	DEFINE PRIVATE VARIABLE cUsername             AS CHARACTER NO-UNDO.
 	DEFINE PRIVATE VARIABLE cPassword             AS CHARACTER NO-UNDO.
+	DEFINE PRIVATE VARIABLE ClientId              AS CHARACTER NO-UNDO.
 	DEFINE PRIVATE VARIABLE hErrorProcess         AS HANDLE    NO-UNDO.
     DEFINE PRIVATE VARIABLE cErrorProcessName     AS CHARACTER NO-UNDO.
 	
-	DEFINE PRIVATE VARIABLE hSocket               AS HANDLE    NO-UNDO.
+	DEFINE PUBLIC  VARIABLE hSocket               AS HANDLE    NO-UNDO.
 	DEFINE PRIVATE VARIABLE hSocketHandlerProcess AS HANDLE    NO-UNDO.
 	
 	DEFINE PRIVATE VARIABLE cSessionID            AS CHARACTER NO-UNDO.
@@ -52,6 +53,20 @@ CLASS Stomp.Connection:
 	           cUsername = ipcUsername
 	           cPassword = ipcPassword
 	           iStatus   = {&STATUS_DISCONNECTED}.
+	END CONSTRUCTOR.
+	CONSTRUCTOR PUBLIC Connection (INPUT ipobjLogger AS Stomp.Logger,
+	                               INPUT ipcServer   AS CHARACTER,
+	                               INPUT ipiPort     AS INTEGER,
+	                               INPUT ipcUsername AS CHARACTER,
+	                               INPUT ipcPassword AS CHARACTER,
+                                       INPUT Client      AS CHARACTER):
+	    ASSIGN objLogger = ipobjLogger
+               cServer   = ipcServer
+	           iPort     = ipiPort
+	           cUsername = ipcUsername
+	           cPassword = ipcPassword
+	           iStatus   = {&STATUS_DISCONNECTED}
+                   ClientId  = Client.
 	END CONSTRUCTOR.
 	
 
@@ -84,6 +99,8 @@ CLASS Stomp.Connection:
             /* Create a connect Frame */
             DEFINE VARIABLE objFrame AS Stomp.Frame NO-UNDO.
             ASSIGN objFrame = Stomp.FrameFactory:makeConnectFrame(INPUT cUsername, INPUT cPassword, INPUT objLogger).
+            if ClientId <> "" then
+              objFrame:addHeaderData("client-id", ClientId).
             CREATE SOCKET hSocket.
             /* Start socket handler procedure persistently */
             RUN {&SOCKET_HANDLER_LOCATION} PERSISTENT
@@ -92,8 +109,9 @@ CLASS Stomp.Connection:
             objLogger:writeEntry(2, "Connection " + cServer + ":" + STRING(iPort) + ": Started socket handler process" +
                                     " (unique-id = """ + STRING(hSocketHandlerProcess:UNIQUE-ID) + """)").
             /* Tell socket to use socket reader procedure to process responses */
-            hSocket:SET-READ-RESPONSE-PROCEDURE({&SOCKET_SUB_PROC_NAME},
-                                                hSocketHandlerProcess).
+            IF SESSION:BATCH-MODE THEN
+              hSocket:SET-READ-RESPONSE-PROCEDURE({&SOCKET_SUB_PROC_NAME},
+                                                  hSocketHandlerProcess).
             /* Connect the socket */
             objLogger:writeEntry(2, "Connection " + cServer + ":" + STRING(iPort) + ": Attempting socket connection to " +
                                     cServer + " on port " + STRING(iPort)).
@@ -139,9 +157,10 @@ CLASS Stomp.Connection:
     END METHOD.
     
 
+
     /* Disconnect from STOMP server */
     METHOD PUBLIC LOGICAL disconnect():
-        IF THIS-OBJECT:isConnected() THEN DO:
+        IF /* THIS-OBJECT:isConnected() */ true THEN DO:
             /* Create a disconnect Frame */
             DEFINE VARIABLE objFrame AS Stomp.Frame NO-UNDO.
             ASSIGN objFrame = Stomp.FrameFactory:makeDisconnectFrame(INPUT objLogger).
@@ -188,7 +207,25 @@ CLASS Stomp.Connection:
     /* Wait for socket to have data ready.  Use this method to wait for server responses to sent messages. */
     METHOD PUBLIC VOID waitForSocket(INPUT ipiWaitTime AS INTEGER):
         ASSIGN hSocket:SENSITIVE = TRUE. /* Needed incase ReadSocketResponse procedure is still open on the procedure stack */
-        WAIT-FOR READ-RESPONSE OF hSocket PAUSE ipiWaitTime.
+        IF SESSION:BATCH-MODE THEN
+        do:
+          WAIT-FOR READ-RESPONSE OF hSocket PAUSE ipiWaitTime.
+        end.
+        else do:
+          define variable t1 as datetime-tz.
+          t1 = now.
+          repeat:
+            if hSocket:GET-BYTES-AVAILABLE() > 0 then
+            do:
+              run {&SOCKET_SUB_PROC_NAME} in hSocketHandlerProcess.
+/*              message "!!!" view-as alert-box. */
+              leave.
+            end.
+            if now - t1 > ipiWaitTime * 1000 then leave.
+            pause 1 no-message.
+          end.
+        end.
+
     END METHOD.
     
 
@@ -198,13 +235,31 @@ CLASS Stomp.Connection:
             ipobjFrame:addTransaction(cTransactionID).
         DEFINE VARIABLE mptrRawFrame AS MEMPTR  NO-UNDO.
         DEFINE VARIABLE iFrameSize   AS INTEGER NO-UNDO.
-        
+       
+        objLogger:dumpFrame(ipobjFrame, 4).
+
         ASSIGN iFrameSize = LENGTH(ipobjFrame:toLongChar(), "RAW").
         SET-SIZE(mptrRawFrame) = iFrameSize + 1. /* MALLOC (Extra byte for NULL-term string) */
         PUT-STRING(mptrRawFrame, 1) = ipobjFrame:toLongChar().
-        hSocket:WRITE(mptrRawFrame, 1, iFrameSize + 1).
-        
-        SET-SIZE(mptrRawFrame) = 0. /* FREE */
+        PUT-BYTE(mptrRawFrame, iFrameSize + 1) = 0.
+
+        DEFINE VARIABLE bytesToWrite   AS INTEGER   NO-UNDO.
+        DEFINE VARIABLE bufferPosition AS INTEGER   NO-UNDO.
+
+        bytesToWrite = iFrameSize + 1.
+        bufferPosition = 1.
+
+        DO WHILE bytesToWrite > 0:
+          hSocket:WRITE(mptrRawFrame, bufferPosition, bytesToWrite).
+          bytesToWrite = bytesToWrite - hSocket:BYTES-WRITTEN.
+          bufferPosition = bufferPosition + hSocket:BYTES-WRITTEN.
+
+          objLogger:writeEntry(4, "Bytes written: " + STRING(hSocket:BYTES-WRITTEN)).
+
+        END.
+        FINALLY:
+          SET-SIZE(mptrRawFrame) = 0.
+        END FINALLY.    
     END METHOD.
     
 
