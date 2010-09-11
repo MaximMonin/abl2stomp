@@ -99,6 +99,87 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
         END.
     END METHOD.
 
+    /* Write data to a STOMP queue, verifying that it was received      */
+    METHOD PUBLIC LOGICAL sendFile(INPUT FileName AS CHAR,
+                               INPUT TABLE-HANDLE iphHeaders,
+                               INPUT ipcTTHdrDataCol AS CHARACTER):
+
+        /* Splitting very big file using 10MB chunks. */
+        define variable FileSize as integer.
+        define variable BytesFrom as integer.
+        define variable BytesTo as integer.
+        define variable CopyBytes as integer.
+        define variable iplcData as LONGCHAR.
+        define variable tempbuf as LONGCHAR.
+
+        if search(FileName) = ? then RETURN.
+        FILE-INFORMATION:FILE-NAME = FileName.
+        FileSize = FILE-INFORMATION:FILE-SIZE.
+        if FileSize = 0 then RETURN.
+
+        FIX-CODEPAGE(tempbuf) = 'UTF-8':U. 
+       
+        BytesFrom = 1.
+        repeat:
+          BytesTo = BytesFrom + 10000000 - 1.
+          if BytesTo > FileSize then BytesTo = FileSize.
+          CopyBytes = BytesTo - BytesFrom + 1.
+
+          /* if splitting file on chunks it is possible to divide 1 UTF-8 symbol on parts, fixing it */
+          define variable i as integer.
+          do i = 1 to 3:
+            COPY-LOB FROM FILE FileName
+              Starting AT BytesFrom FOR CopyBytes TO tempBuf NO-CONVERT NO-ERROR.
+            if ERROR-STATUS:ERROR = FALSE then leave.
+            CopyBytes = CopyBytes + 1.
+            BytesTo = BytesTo + 1.
+          end.
+          tempBuf = "".
+          COPY-LOB FROM FILE FileName
+              Starting AT BytesFrom FOR CopyBytes TO iplcData NO-CONVERT NO-ERROR.
+
+
+          DEFINE VARIABLE objSendFrame AS Stomp.Frame NO-UNDO.
+          ASSIGN objSendFrame    = Stomp.FrameFactory:makeSendFrame(INPUT THIS-OBJECT:cDestQueue, INPUT iplcData, INPUT objLogger)
+                 iStatus         = {&STATUS_RECEIPT_WAIT}
+                 cReceiptWaiting = objSendFrame:addReceipt().
+          /* Attach input header data */
+          IF objSendFrame:addHeaderData(INPUT TABLE-HANDLE iphHeaders,
+                                        INPUT ipcTTHdrDataCol) THEN 
+          DO:
+            objSendFrame:addHeaderData ("FilePart", STRING(BytesTo)).
+    
+            objLogger:writeEntry(2, "Producer on " + cDestQueue + ": Sending frame to server and" +
+                                  " waiting for a response (receipt = '" + cReceiptWaiting + "')...").
+            /* Send the frame */
+            objConnection:sendFrame(objSendFrame).
+            DELETE OBJECT objSendFrame.
+            iplcData = "".
+            objConnection:waitForSocket({&SOCKET_WAIT_TIME}).
+            /* Note: receipt checking is done in processReceipt method */
+            IF lReceiptProcOK THEN DO:
+                objLogger:writeEntry(1, "Producer on " + cDestQueue + ": STOMP server acknowledged receipt of transmitted data.").
+                THIS-OBJECT:setStatusToReady().
+            END.
+            ELSE DO:
+                objLogger:writeEntry(1, "Producer on " + cDestQueue + ": STOMP server either did not acknowledge receipt of " +
+                                        "transmitted data, or request timed out after {&SOCKET_WAIT_TIME} seconds limit reached.").
+                THIS-OBJECT:setStatusToReady(). /* So we can do another send (although best course of action is probably to shut down) */
+                RETURN FALSE.
+            END.
+          END. /* IF objSendFrame:addHeaderData */
+          ELSE DO:
+            objLogger:writeError(1, "Producer on " + cDestQueue + ": Could not attach headers to frame!").
+            RETURN FALSE.
+          END.
+          BytesFrom = BytesFrom + CopyBytes.
+          if BytesFrom > FileSize then leave.
+        end.
+        DELETE OBJECT iphHeaders. /* Clean up dynamic temp-table memory */
+        RETURN TRUE.
+    END METHOD.
+
+
     /* Write a raw STOMP frame to the queue, verifying that it was received      */
     /* This method relies on the caller creating the STOMP Frame object manually */
     /* NOTE: Caller should delete Frame object when this method returns!         */

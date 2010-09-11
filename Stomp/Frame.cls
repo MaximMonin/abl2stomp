@@ -45,7 +45,7 @@ CLASS Stomp.Frame:
         DEFINE VARIABLE iEndBoundary AS INTEGER NO-UNDO.
         
         ASSIGN objLogger = ipobjLogger.
-        
+        objLogger:WriteEntry (4,string(LENGTH(lcRaw))).
         /* Fix for socket data starting with an extraneous newline character */
         IF INDEX(lcRaw, {&NEWLINE}, 1) EQ 1 THEN
             ASSIGN lcRaw = SUBSTRING(lcRaw, 2).
