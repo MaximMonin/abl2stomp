@@ -160,22 +160,25 @@ CLASS Stomp.Connection:
 
     /* Disconnect from STOMP server */
     METHOD PUBLIC LOGICAL disconnect():
-        IF /* THIS-OBJECT:isConnected() */ true THEN DO:
+        IF THIS-OBJECT:isConnected() THEN DO:
             /* Create a disconnect Frame */
             DEFINE VARIABLE objFrame AS Stomp.Frame NO-UNDO.
             ASSIGN objFrame = Stomp.FrameFactory:makeDisconnectFrame(INPUT objLogger).
             /* Send the STOMP Disconnect frame, not waiting for an acknowledgement from server */
-            objLogger:writeEntry(1, "Connection " + cServer + ":" + STRING(iPort) + ": Sending STOMP Disconnect frame...").
+            if valid-object(objLogger) then
+              objLogger:writeEntry(1, "Connection " + cServer + ":" + STRING(iPort) + ": Sending STOMP Disconnect frame...").
             sendFrame(objFrame).
             DELETE OBJECT objFrame.
             /* Disconnect the socket */
-            objLogger:writeEntry(1, "Connection " + cServer + ":" + STRING(iPort) + ": Closing socket...").
+            if valid-object(objLogger) then
+              objLogger:writeEntry(1, "Connection " + cServer + ":" + STRING(iPort) + ": Closing socket...").
             RETURN hSocket:DISCONNECT().
         END.
         ELSE DO:
             /* Handle Connection not connected to anything */
-            objLogger:writeError(3, "Connection " + cServer + ":" + STRING(iPort) + ": disconnect() called, but Connection" +
-                                    " is already disconnected!").
+            if valid-object(objLogger) then
+              objLogger:writeError(3, "Connection " + cServer + ":" + STRING(iPort) + ": disconnect() called, but Connection" +
+                                      " is already disconnected!").
             RETURN FALSE.
         END.
     END METHOD.
@@ -188,10 +191,11 @@ CLASS Stomp.Connection:
 	        RETURN TRUE.
 	    END.
 	    ELSE DO:
-            objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": Attempt to add new Queue """ +
-                                    ipobjQueue:getDestinationName() + """ when Connection already has a reference to" +
-                                    " Queue """ + objQueue:getDestinationName() + """ (a Connection can only have a" +
-                                    " reference to one Queue at a time. Call removeQueue() before you add another one!)").
+            if valid-object(objLogger) then
+              objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": Attempt to add new Queue """ +
+                                      ipobjQueue:getDestinationName() + """ when Connection already has a reference to" +
+                                      " Queue """ + objQueue:getDestinationName() + """ (a Connection can only have a" +
+                                      " reference to one Queue at a time. Call removeQueue() before you add another one!)").
             RETURN FALSE.
         END.
 	END METHOD.
@@ -236,7 +240,8 @@ CLASS Stomp.Connection:
         DEFINE VARIABLE mptrRawFrame AS MEMPTR  NO-UNDO.
         DEFINE VARIABLE iFrameSize   AS INTEGER NO-UNDO.
        
-        objLogger:dumpFrame(ipobjFrame, 4).
+        if valid-object(objLogger) then
+          objLogger:dumpFrame(ipobjFrame, 4).
 
         ASSIGN iFrameSize = LENGTH(ipobjFrame:toLongChar(), "RAW").
         SET-SIZE(mptrRawFrame) = iFrameSize + 1. /* MALLOC (Extra byte for NULL-term string) */
@@ -254,7 +259,8 @@ CLASS Stomp.Connection:
           bytesToWrite = bytesToWrite - hSocket:BYTES-WRITTEN.
           bufferPosition = bufferPosition + hSocket:BYTES-WRITTEN.
 
-          objLogger:writeEntry(4, "Bytes written: " + STRING(hSocket:BYTES-WRITTEN)).
+          if valid-object(objLogger) then
+            objLogger:writeEntry(4, "Bytes written: " + STRING(hSocket:BYTES-WRITTEN)).
 
         END.
         FINALLY:
@@ -277,21 +283,24 @@ CLASS Stomp.Connection:
             IF lReceiptProcessed THEN DO:
                 /* Server acknowledged transaction begin message */
                 ASSIGN cTransactionID = cTransID. /* Save the transaction ID */
-                objLogger:writeEntry(2, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server acknowledged " +
-                                        " transaction begin request. Server requests are now in a TRANSACTION.").
+                if valid-object(objLogger) then
+                  objLogger:writeEntry(2, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server acknowledged " +
+                                          " transaction begin request. Server requests are now in a TRANSACTION.").
                 RETURN TRUE.
             END.
             ELSE DO:
                 /* Server did not acknowledge transaction begin message! */
-                objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server did not acknowledge begin" +
-                                        " transaction request, or request failed due to {&SOCKET_WAIT_TIME} seconds timeout!").
+                if valid-object(objLogger) then
+                  objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server did not acknowledge begin" +
+                                          " transaction request, or request failed due to {&SOCKET_WAIT_TIME} seconds timeout!").
                 RETURN FALSE.
             END.
 	    END.
         ELSE DO:
             /* Handle not connected / transaction already open */
-            objLogger:writeError(2, "Connection " + cServer + ":" + STRING(iPort) + ": Transaction begin not possible.  Connection " +
-                                    " either is not connected, or there is already an open transaction."). 
+            if valid-object(objLogger) then
+              objLogger:writeError(2, "Connection " + cServer + ":" + STRING(iPort) + ": Transaction begin not possible.  Connection " +
+                                      " either is not connected, or there is already an open transaction."). 
             RETURN FALSE.
         END.
 	END METHOD.
@@ -323,21 +332,24 @@ CLASS Stomp.Connection:
             IF lReceiptProcessed THEN DO:
                 /* Server acknowledged transaction commit message */
                 ASSIGN cTransactionID = "". /* Clear the transaction ID */
-                objLogger:writeEntry(2, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server acknowledged " +
-                                        " transaction commit request. Server has committed all requests within this transaction.").
+                if valid-object(objLogger) then
+                  objLogger:writeEntry(2, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server acknowledged " +
+                                          " transaction commit request. Server has committed all requests within this transaction.").
                 RETURN TRUE.
             END.
             ELSE DO:
                 /* Server did not acknowledge transaction commit message! */
-                objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server did not acknowledge commit" +
-                                        " transaction request, or commit failed due to {&SOCKET_WAIT_TIME} seconds timeout!").
+                if valid-object(objLogger) then
+                  objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server did not acknowledge commit" +
+                                          " transaction request, or commit failed due to {&SOCKET_WAIT_TIME} seconds timeout!").
                 RETURN FALSE.
             END.
 	    END.
         ELSE DO:
             /* Handle not connected / no transaction open */
-            objLogger:writeError(2, "Connection " + cServer + ":" + STRING(iPort) + ": transaction commit not possible.  Connection " +
-                                    " either is not connected, or there is no transaction open to commit."). 
+            if valid-object(objLogger) then
+              objLogger:writeError(2, "Connection " + cServer + ":" + STRING(iPort) + ": transaction commit not possible.  Connection " +
+                                      " either is not connected, or there is no transaction open to commit."). 
             RETURN FALSE.
         END.
 	END METHOD.
@@ -357,21 +369,24 @@ CLASS Stomp.Connection:
             IF lReceiptProcessed THEN DO:
                 /* Server acknowledged transaction abort message */
                 ASSIGN cTransactionID = "". /* Clear the transaction ID */
-                objLogger:writeEntry(2, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server acknowledged " +
-                                        " transaction abort request. Server has aborted all requests within this transaction.").
+                if valid-object(objLogger) then
+                  objLogger:writeEntry(2, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server acknowledged " +
+                                          " transaction abort request. Server has aborted all requests within this transaction.").
                 RETURN TRUE.
             END.
             ELSE DO:
                 /* Server did not acknowledge transaction abort message! */
-                objLogger:writeError(2, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server did not acknowledge abort" +
-                                        " transaction request, or abort failed due to {&SOCKET_WAIT_TIME} seconds timeout!").
+                if valid-object(objLogger) then
+                  objLogger:writeError(2, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP Server did not acknowledge abort" +
+                                          " transaction request, or abort failed due to {&SOCKET_WAIT_TIME} seconds timeout!").
                 RETURN FALSE.
             END.
 	    END.
         ELSE DO:
             /* Handle not connected / no transaction open */
-            objLogger:writeError(2, "Connection " + cServer + ":" + STRING(iPort) + ": transaction abort not possible.  Connection " +
-                                    " either is not connected, or there is no transaction open to abort."). 
+            if valid-object(objLogger) then
+              objLogger:writeError(2, "Connection " + cServer + ":" + STRING(iPort) + ": transaction abort not possible.  Connection " +
+                                      " either is not connected, or there is no transaction open to abort."). 
             RETURN FALSE.
         END.
 	END METHOD.
@@ -462,7 +477,8 @@ CLASS Stomp.Connection:
         objLogger:writeError(ipiErrorLevel, ipcError).
         /* Dump Frame to log */
         IF ipobjFrame NE ? THEN
-            objLogger:dumpFrame(INPUT ipobjFrame).
+            if valid-object(objLogger) then
+              objLogger:dumpFrame(INPUT ipobjFrame).
         /* Throw error to user-supplied error handling procedure */
         IF VALID-HANDLE(objQueue:getErrorProcessHandle()) THEN
             RUN VALUE(objQueue:getErrorProcessName()) 
@@ -490,7 +506,7 @@ CLASS Stomp.Connection:
     
 
     METHOD PUBLIC LOGICAL isConnected():
-        IF iStatus NE {&STATUS_CONNECTED} THEN
+        IF iStatus = {&STATUS_DISCONNECTED} THEN
             RETURN FALSE.
         IF NOT VALID-HANDLE(hSocket) THEN
             RETURN FALSE.

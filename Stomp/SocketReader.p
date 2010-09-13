@@ -1,4 +1,3 @@
-
  /*------------------------------------------------------------------------
     File        : SocketReader.p
     Purpose     : Read-response procedure for the socket connection.
@@ -21,7 +20,9 @@ DEFINE INPUT PARAMETER ipobjLogger         AS Stomp.Logger     NO-UNDO.
 DEFINE VARIABLE        lcFullResponseData  AS LONGCHAR         NO-UNDO.
 DEFINE VARIABLE        lcFullResponseData1 AS LONGCHAR         NO-UNDO.
 define variable        hSocket             AS HANDLE           NO-UNDO.
+DEFINE variable        objLogger           AS Stomp.Logger     NO-UNDO.
 hSocket = objConnection:hSocket.
+objLogger = ipobjLogger.
 /*--------------------------------------------------------------------------*/
 /*                                PROCEDURES                                */
 /*--------------------------------------------------------------------------*/
@@ -39,28 +40,30 @@ PROCEDURE ReadSocketResponse:
   ERROR-STATUS:ERROR = NO.
 
   repeat:
+    if not valid-object (objLogger) then leave.
     iBytesAvailable = MINIMUM(hSocket:GET-BYTES-AVAILABLE(), {&BUFFER_MAX}) NO-ERROR.
-
     IF ERROR-STATUS:ERROR THEN
-        ipobjLogger:writeError(1, "SocketReader: Getting bytes available").
+    do:
+      objLogger:writeError(1, "SocketReader: Getting bytes available").
+    end.
     ELSE DO:
-        ipobjLogger:writeEntry(4, "SocketReader: Bytes available=" + STRING(iBytesAvailable)).        
+        objLogger:writeEntry(4, "SocketReader: Bytes available=" + STRING(iBytesAvailable)).        
         
         SET-SIZE(mResponseData) = 0.
         SET-SIZE(mResponseData) = iBytesAvailable + 1.
         
-        ipobjLogger:writeEntry(4, "SocketReader: Reading response...").
+        objLogger:writeEntry(4, "SocketReader: Reading response...").
         
         ERROR-STATUS:ERROR = NO.
     
         def var state as logical.
         state = hSocket:READ(mResponseData, 1, iBytesAvailable, READ-EXACT-NUM) NO-ERROR.
         if state = false then
-            ipobjLogger:writeError(1, "SocketReader: Reading from socket error").
+          objLogger:writeError(1, "SocketReader: Reading from socket error").
 
         
         IF ERROR-STATUS:ERROR THEN DO:
-            ipobjLogger:writeError(1, "SocketReader: Reading from socket").
+            objLogger:writeError(1, "SocketReader: Reading from socket").
             SET-SIZE(mResponseData) = 0.
         END. /* ERROR-STATUS:ERROR */
         ELSE DO: /* ELSE / ERROR-STATUS:ERROR */
@@ -77,9 +80,9 @@ PROCEDURE ReadSocketResponse:
                 cResponseData   = GET-STRING(mResponseData, iStartReadPosition).
                 iResponseLength = LENGTH(cResponseData, "RAW").
 
-                ipobjLogger:writeEntry(4, "SocketReader: Start pos=" + STRING(iStartReadPosition) + "," +
-                                      "Line length=" + STRING(iResponseLength) + "," +
-                                      "Read data=" + cResponseData).
+                objLogger:writeEntry(4, "SocketReader: Start pos=" + STRING(iStartReadPosition) + "," +
+                                        "Line length=" + STRING(iResponseLength) + "," +
+                                        "Read data=" + cResponseData).
 
                 
                 
@@ -99,7 +102,7 @@ PROCEDURE ReadSocketResponse:
                     lcFullResponseData = lcFullResponseData  + lcFullResponseData1.
 
                     DEFINE VARIABLE objFrame AS Stomp.Frame NO-UNDO.
-                    ASSIGN objFrame = NEW Stomp.Frame(INPUT lcFullResponseData, INPUT ipobjLogger).
+                    ASSIGN objFrame = NEW Stomp.Frame(INPUT lcFullResponseData, INPUT objLogger).
                     lcFullResponseData = "".
                     lcFullResponseData1 = "".
                     objConnection:routeFrame(objFrame).

@@ -38,7 +38,8 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
         DEFINE VARIABLE objSendFrame AS Stomp.Frame NO-UNDO.
         ASSIGN objSendFrame    = Stomp.FrameFactory:makeSendFrame(INPUT THIS-OBJECT:cDestQueue, INPUT iplcData, INPUT objLogger)
                iStatus         = {&STATUS_RECEIPT_WAIT}
-               cReceiptWaiting = objSendFrame:addReceipt().
+               cReceiptWaiting = objSendFrame:addReceipt()
+               lReceiptProcOK    = FALSE.
         objLogger:writeEntry(2, "Producer on " + cDestQueue + ": Sending frame to server and" +
                                 " waiting for a response (receipt = '" + cReceiptWaiting + "')...").
         /* Send the frame */
@@ -68,7 +69,8 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
         DEFINE VARIABLE objSendFrame AS Stomp.Frame NO-UNDO.
         ASSIGN objSendFrame    = Stomp.FrameFactory:makeSendFrame(INPUT THIS-OBJECT:cDestQueue, INPUT iplcData, INPUT objLogger)
                iStatus         = {&STATUS_RECEIPT_WAIT}
-               cReceiptWaiting = objSendFrame:addReceipt().
+               cReceiptWaiting = objSendFrame:addReceipt()
+               lReceiptProcOK    = FALSE.
         /* Attach input header data */
         IF objSendFrame:addHeaderData(INPUT TABLE-HANDLE iphHeaders,
                                       INPUT ipcTTHdrDataCol) THEN DO:
@@ -100,7 +102,7 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
     END METHOD.
 
     /* Write data to a STOMP queue, verifying that it was received      */
-    METHOD PUBLIC LOGICAL sendFile(INPUT FileName AS CHAR,
+    METHOD PUBLIC LOGICAL sendFile(INPUT FileName AS CHAR, INPUT UseTransaction as LOGICAL,
                                INPUT TABLE-HANDLE iphHeaders,
                                INPUT ipcTTHdrDataCol AS CHARACTER):
 
@@ -138,19 +140,25 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
           COPY-LOB FROM FILE FileName
               Starting AT BytesFrom FOR CopyBytes TO iplcData NO-CONVERT NO-ERROR.
 
+          if BytesFrom = 1 and CopyBytes <  FileSize and UseTransaction then
+          do:
+            if objConnection:startTransaction (FileName) = false then RETURN FALSE.
+          end.
 
           DEFINE VARIABLE objSendFrame AS Stomp.Frame NO-UNDO.
           ASSIGN objSendFrame    = Stomp.FrameFactory:makeSendFrame(INPUT THIS-OBJECT:cDestQueue, INPUT iplcData, INPUT objLogger)
                  iStatus         = {&STATUS_RECEIPT_WAIT}
                  cReceiptWaiting = objSendFrame:addReceipt().
+                 lReceiptProcOK    = FALSE.
           /* Attach input header data */
           IF objSendFrame:addHeaderData(INPUT TABLE-HANDLE iphHeaders,
                                         INPUT ipcTTHdrDataCol) THEN 
           DO:
             objSendFrame:addHeaderData ("FilePart", STRING(BytesTo)).
     
-            objLogger:writeEntry(2, "Producer on " + cDestQueue + ": Sending frame to server and" +
-                                  " waiting for a response (receipt = '" + cReceiptWaiting + "')...").
+            if valid-object (objLogger) then
+              objLogger:writeEntry(2, "Producer on " + cDestQueue + ": Sending frame to server and" +
+                                    " waiting for a response (receipt = '" + cReceiptWaiting + "')...").
             /* Send the frame */
             objConnection:sendFrame(objSendFrame).
             DELETE OBJECT objSendFrame.
@@ -158,24 +166,33 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
             objConnection:waitForSocket({&SOCKET_WAIT_TIME}).
             /* Note: receipt checking is done in processReceipt method */
             IF lReceiptProcOK THEN DO:
+              if valid-object (objLogger) then
                 objLogger:writeEntry(1, "Producer on " + cDestQueue + ": STOMP server acknowledged receipt of transmitted data.").
                 THIS-OBJECT:setStatusToReady().
             END.
             ELSE DO:
+              if valid-object (objLogger) then
                 objLogger:writeEntry(1, "Producer on " + cDestQueue + ": STOMP server either did not acknowledge receipt of " +
                                         "transmitted data, or request timed out after {&SOCKET_WAIT_TIME} seconds limit reached.").
-                THIS-OBJECT:setStatusToReady(). /* So we can do another send (although best course of action is probably to shut down) */
-                RETURN FALSE.
+              THIS-OBJECT:setStatusToReady(). /* So we can do another send (although best course of action is probably to shut down) */
+              if CopyBytes <> FileSize and UseTransaction then
+                objConnection:abortTransaction ().
+              RETURN FALSE.
             END.
           END. /* IF objSendFrame:addHeaderData */
           ELSE DO:
-            objLogger:writeError(1, "Producer on " + cDestQueue + ": Could not attach headers to frame!").
+            if valid-object (objLogger) then
+              objLogger:writeError(1, "Producer on " + cDestQueue + ": Could not attach headers to frame!").
+            if CopyBytes <> FileSize and UseTransaction then
+              objConnection:abortTransaction ().
             RETURN FALSE.
           END.
           BytesFrom = BytesFrom + CopyBytes.
           if BytesFrom > FileSize then leave.
         end.
         DELETE OBJECT iphHeaders. /* Clean up dynamic temp-table memory */
+        if CopyBytes <> FileSize and UseTransaction then
+          objConnection:commitTransaction ().
         RETURN TRUE.
     END METHOD.
 

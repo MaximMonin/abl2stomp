@@ -15,15 +15,16 @@ DEFINE TEMP-TABLE ttHeaders NO-UNDO
 
 DEFINE VARIABLE bigMessage   AS LONGCHAR  NO-UNDO.
 define variable Filesize as integer.
+define variable okflag as logical.
 
 DEFINE VARIABLE objProducer   AS Stomp.Producer NO-UNDO.
 DEFINE VARIABLE objLogger     AS Stomp.Logger   NO-UNDO.
 
-if search(FileName) = ? then RETURN.
+if search(FileName) = ? then RETURN "ERROR".
 
 FILE-INFORMATION:FILE-NAME = FileName.
 FileSize = FILE-INFORMATION:FILE-SIZE.
-if FileSize = 0 then RETURN.
+if FileSize = 0 then RETURN "ERROR".
 
 COPY-LOB FROM FILE FileName to bigMessage NO-CONVERT.
 
@@ -39,7 +40,7 @@ ASSIGN objProducer = NEW Stomp.Producer(TopicName, objLogger, "ErrorHandler", TH
 IF NOT objProducer:connect(HostName, PortNumb, UserName, UserPass) THEN 
 DO:
   RUN CleanUp.
-  RETURN.
+  RETURN "ERROR".
 END.
 
 
@@ -53,10 +54,13 @@ CREATE ttHeaders.
 ASSIGN ttHeaders.cHdrData[1] = "FileSize"
        ttHeaders.cHdrData[2] = STRING(FileSize).
 
-objProducer:sendFile(FileName, TABLE ttHeaders, "cHdrData").
+okflag = false.
+okflag = objProducer:sendFile(FileName, true, TABLE ttHeaders, "cHdrData").
 
 FINALLY:
   RUN CleanUp.
+  if okflag then RETURN "OK".
+  else RETURN "ERROR".
 END.
 
 /*------------------------------------------------------------------------------------------------------------------*/
@@ -88,9 +92,11 @@ PROCEDURE ErrorHandler:
   objLogger:writeError(ipiErrorLevel, ipcError).
 
   /* Dump raw Frame data to log, if available */
+
   IF ipobjFrame NE ? THEN
     objLogger:dumpFrame(ipobjFrame).
   
+
   IF ipiErrorLevel LE 2 THEN DO:
     /* Quit program on severe error */
     IF ipiErrorLevel LE 1 THEN DO:
@@ -104,5 +110,6 @@ PROCEDURE ErrorHandler:
   ELSE DO: /* ErrorLvl GE 3 */
       /* Do nothing - we will read log file if we are interested */
   END.
+
 END PROCEDURE.
 
