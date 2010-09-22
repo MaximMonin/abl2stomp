@@ -9,6 +9,7 @@ define input parameter PortNumb as integer.
 define input parameter UserName as character.
 define input parameter UserPass as character.
 define input parameter TopicName as character.
+define input parameter HeaderData as character.
 
 DEFINE TEMP-TABLE ttHeaders NO-UNDO
   FIELD cHdrData AS CHARACTER EXTENT 2.
@@ -42,6 +43,13 @@ DO:
   RUN CleanUp.
   RETURN "ERROR".
 END.
+
+define var i as integer.
+do i = 1 to NUM-ENTRIES (HeaderData, "|") by 2:
+  CREATE ttHeaders.
+  ASSIGN ttHeaders.cHdrData[1] = ENTRY(i,HeaderData, "|").
+  ASSIGN ttHeaders.cHdrData[2] = ENTRY(i + 1,HeaderData, "|").
+end.
 
 
 CREATE ttHeaders.
