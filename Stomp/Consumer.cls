@@ -116,12 +116,14 @@ CLASS Stomp.Consumer INHERITS Stomp.Queue:
             /* Verify that we are now subscribed */
             IF lReceiptProcOK THEN DO:
                 THIS-OBJECT:setStatusToSubscribed().
-                objLogger:writeEntry(1, "Consumer on " + cDestQueue + ": Successfully subscribed to " + cDestQueue + "; waiting for messages...").
+                if valid-object (objLogger) then
+                  objLogger:writeEntry(1, "Consumer on " + cDestQueue + ": Successfully subscribed to " + cDestQueue + "; waiting for messages...").
                 RETURN TRUE.
             END.
             ELSE DO:
-                objLogger:writeError(1, "Consumer on " + cDestQueue + ": Could not subscribe to " + cDestQueue + "; subscription refused or attempt timed " +
-                                        "out due to {&SOCKET_WAIT_TIME} second wait limit. Try again later.").
+                if valid-object (objLogger) then
+                  objLogger:writeError(1, "Consumer on " + cDestQueue + ": Could not subscribe to " + cDestQueue + "; subscription refused or attempt timed " +
+                                          "out due to {&SOCKET_WAIT_TIME} second wait limit. Try again later.").
                 RETURN FALSE.
             END.
         END.
@@ -220,7 +222,7 @@ CLASS Stomp.Consumer INHERITS Stomp.Queue:
                     IN hParentProcess(ipobjFrameMsg).
         END.
         ELSE DO:
-            objLogger:writeError(2, "Consumer on " + cDestQueue + ": Received message before subscription! Process it anyway!!!").
+            objLogger:writeError(3, "Consumer on " + cDestQueue + ": Received message before subscription! Process it anyway!!!").
             objLogger:writeEntry(2, "Consumer on " + cDestQueue + ": Received a message; routing it" +
                                     " to handling procedure").
             /* Send message up to client procedure to properly handle it */
@@ -261,4 +263,7 @@ CLASS Stomp.Consumer INHERITS Stomp.Queue:
         RETURN (iStatus EQ {&STATUS_SUBSCRIBED}).
     END METHOD.
 
+    METHOD PUBLIC VOID waitForSocket(INPUT ipiWaitTime AS INTEGER):
+        objConnection:waitForSocket(ipiWaitTime).
+    END METHOD.
 END CLASS.

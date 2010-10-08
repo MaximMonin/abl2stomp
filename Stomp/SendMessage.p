@@ -3,39 +3,28 @@ USING Stomp.*.
 
 ROUTINE-LEVEL ON ERROR UNDO, THROW.
 
-define input parameter FileName as character.
+define input parameter MessageData as longchar.
 define input parameter HostName as character.
 define input parameter PortNumb as integer.
 define input parameter UserName as character.
 define input parameter UserPass as character.
-define input parameter TopicName as character.
+define input parameter QueueName as character.
 define input parameter HeaderData as character.
 
 DEFINE TEMP-TABLE ttHeaders NO-UNDO
   FIELD cHdrData AS CHARACTER EXTENT 2.
 
-DEFINE VARIABLE bigMessage   AS LONGCHAR  NO-UNDO.
-define variable Filesize as integer.
 define variable okflag as logical.
 
 DEFINE VARIABLE objProducer   AS Stomp.Producer NO-UNDO.
 DEFINE VARIABLE objLogger     AS Stomp.Logger   NO-UNDO.
-
-if search(FileName) = ? then RETURN "ERROR".
-
-FILE-INFORMATION:FILE-NAME = FileName.
-FileSize = FILE-INFORMATION:FILE-SIZE.
-if FileSize = 0 then RETURN "ERROR".
-
-COPY-LOB FROM FILE FileName to bigMessage NO-CONVERT.
-
 
 objLogger   = NEW Stomp.Logger("log/producer.log", /* Log file name */
                                                 2, /* Max logging entry level */
                                                 2  /* Max logging error level */)
 .
 IF not VALID-OBJECT(objLogger) THEN RETURN "ERROR".
-ASSIGN objProducer = NEW Stomp.Producer(TopicName, objLogger, "ErrorHandler", THIS-PROCEDURE).
+ASSIGN objProducer = NEW Stomp.Producer(QueueName, objLogger, "ErrorHandler", THIS-PROCEDURE).
 
 /* Connect to ActiveMQ server */
 IF NOT objProducer:connect(HostName, PortNumb, UserName, UserPass) THEN 
@@ -51,19 +40,8 @@ do i = 1 to NUM-ENTRIES (HeaderData, "|") by 2:
   ASSIGN ttHeaders.cHdrData[2] = ENTRY(i + 1,HeaderData, "|").
 end.
 
-
-CREATE ttHeaders.
-ASSIGN ttHeaders.cHdrData[1] = "persistent"
-       ttHeaders.cHdrData[2] = "true".
-CREATE ttHeaders.
-ASSIGN ttHeaders.cHdrData[1] = "FileName"
-       ttHeaders.cHdrData[2] = FileName.
-CREATE ttHeaders.
-ASSIGN ttHeaders.cHdrData[1] = "FileSize"
-       ttHeaders.cHdrData[2] = STRING(FileSize).
-
 okflag = false.
-okflag = objProducer:sendFile(FileName, true, TABLE ttHeaders, "cHdrData").
+okflag = objProducer:send(MessageData, TABLE ttHeaders, "cHdrData").
 
 FINALLY:
   RUN CleanUp.
