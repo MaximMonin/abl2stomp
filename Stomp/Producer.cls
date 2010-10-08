@@ -108,6 +108,7 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
 
         /* Splitting very big file using 10MB chunks. */
         define variable FileSize as integer.
+        define variable FilePartNumb as integer.
         define variable BytesFrom as integer.
         define variable BytesTo as integer.
         define variable CopyBytes as integer.
@@ -122,6 +123,7 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
         FIX-CODEPAGE(tempbuf) = 'UTF-8':U. 
        
         BytesFrom = 1.
+        FilePartNumb = 0.
         repeat:
           BytesTo = BytesFrom + 10000000 - 1.
           if BytesTo > FileSize then BytesTo = FileSize.
@@ -154,6 +156,8 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
           IF objSendFrame:addHeaderData(INPUT TABLE-HANDLE iphHeaders,
                                         INPUT ipcTTHdrDataCol) THEN 
           DO:
+            FilePartNumb = FilePartNumb + 1.
+            objSendFrame:addHeaderData ("FilePartNumb", STRING(FilePartNumb)).
             objSendFrame:addHeaderData ("FilePart", STRING(BytesTo)).
     
             if valid-object (objLogger) then

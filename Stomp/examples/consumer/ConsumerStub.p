@@ -95,13 +95,19 @@ PROCEDURE MessageHandler:
   define variable filename as character.
   define variable filesize as integer.
   define variable filepart as integer.
+  define variable filepartnumb as integer.
   filename = ipobjFrame:getHeaderValue ("FileName").
   filesize = INTEGER(ipobjFrame:getHeaderValue ("FileSize")).
   filepart = INTEGER(ipobjFrame:getHeaderValue ("FilePart")).
+  filepartnumb = INTEGER(ipobjFrame:getHeaderValue ("FilePartNumb")).
+
   if filename = ? or filename = "" then
-    filename = "log/" + ipobjFrame:getHeaderValue ("message-id").
-  else
-    filename = "log/" + filename.
+    filename = "imp/" + ipobjFrame:getHeaderValue ("message-id").
+  else do:
+    if INDEX (filename, "/") > 0 then
+      filename = SUBSTRING(filename,R-INDEX(filename, "/") + 1).
+    filename = "imp/" + filename.
+  end.
   if FilePart = 0 then
   do:
     copy-lob lcMessage to file filename.
@@ -112,7 +118,10 @@ PROCEDURE MessageHandler:
     objLogger:writeEntry(1, "Received file: " + FileName + ", Size (" + string(length(lcMessage)) + ")").
   end.
   else do:
-    copy-lob lcMessage to file filename append.
+    if filepartnumb = 1 then
+      copy-lob lcMessage to file filename.
+    else
+      copy-lob lcMessage to file filename append.
     objLogger:writeEntry(1, "Received file: " + FileName + ", Total :" + string(filepart) +  ", Size (" + string(length(lcMessage)) + ")").
   end.
   
