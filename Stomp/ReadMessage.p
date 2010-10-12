@@ -54,6 +54,9 @@ END PROCEDURE.
 PROCEDURE MessageHandler:
   DEFINE INPUT PARAMETER ipobjFrame AS Stomp.Frame NO-UNDO.
 
+/* After Ack first message MQ immediately sends next message in queue, do not process it and disconnect from queue */
+  if ReadMessage = true then RETURN. 
+
   ReadMessage = True.
 
   define variable rc as character.

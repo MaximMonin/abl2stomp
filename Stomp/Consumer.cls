@@ -151,6 +151,13 @@ CLASS Stomp.Consumer INHERITS Stomp.Queue:
                 objLogger:writeEntry(1, "Consumer on " + cDestQueue + ": Successfully unsubscribed from " + cDestQueue + ".").
                 RETURN TRUE.
             END.
+            /* If Mq sends message on unsubscribe query, repeat one more time */
+            objConnection:waitForSocket({&SOCKET_WAIT_TIME}).
+            IF lReceiptProcOK THEN DO:
+                THIS-OBJECT:setStatusToUnsubscribed().
+                objLogger:writeEntry(1, "Consumer on " + cDestQueue + ": Successfully unsubscribed from " + cDestQueue + ".").
+                RETURN TRUE.
+            END.
             ELSE DO:
                 objLogger:writeError(1, "Consumer on " + cDestQueue + ": Could not unsubscribe from " + cDestQueue + "; unsubscribe refused or attempt timed " +
                                     "out due to {&SOCKET_WAIT_TIME} second wait limit. Try again later.").
