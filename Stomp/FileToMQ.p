@@ -102,17 +102,14 @@ PROCEDURE ErrorHandler:
   /* Dump raw Frame data to log, if available */
 
   IF ipobjFrame NE ? THEN
-    objLogger:dumpFrame(ipobjFrame).
+    objLogger:dumpErrorFrame(ipobjFrame, ipiErrorLevel).
   
 
   IF ipiErrorLevel LE 2 THEN DO:
     /* Quit program on severe error */
     IF ipiErrorLevel LE 1 THEN DO:
       /* Garbage collection */
-      IF VALID-OBJECT(objProducer) THEN
-        DELETE OBJECT objProducer.
-      IF VALID-OBJECT(objLogger) THEN
-        DELETE OBJECT objLogger.
+      RUN CleanUp.
     END. /* IF ipiErrorLevel LE 1 */
   END. /* IF ipiErrorLevel LE 2 */
   ELSE DO: /* ErrorLvl GE 3 */

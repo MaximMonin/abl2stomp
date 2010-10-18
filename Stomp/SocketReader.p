@@ -21,8 +21,10 @@ DEFINE VARIABLE        lcFullResponseData  AS LONGCHAR         NO-UNDO.
 DEFINE VARIABLE        lcFullResponseData1 AS LONGCHAR         NO-UNDO.
 define variable        hSocket             AS HANDLE           NO-UNDO.
 DEFINE variable        objLogger           AS Stomp.Logger     NO-UNDO.
+DEFINE variable        objConn             AS Stomp.Connection NO-UNDO.
 hSocket = objConnection:hSocket.
 objLogger = ipobjLogger.
+objConn = objConnection.
 /*--------------------------------------------------------------------------*/
 /*                                PROCEDURES                                */
 /*--------------------------------------------------------------------------*/
@@ -35,12 +37,14 @@ PROCEDURE ReadSocketResponse:
   DEFINE VARIABLE iStartReadPosition AS INTEGER   NO-UNDO.
   DEFINE VARIABLE iResponseLength    AS INTEGER   NO-UNDO.
 
+  if not valid-handle (hSocket) then RETURN.
   if SESSION:BATCH then
     hSocket:SENSITIVE = NO.
   ERROR-STATUS:ERROR = NO.
 
   repeat:
     if not valid-object (objLogger) then leave.
+    if not valid-object (objConn) then leave.
     iBytesAvailable = MINIMUM(hSocket:GET-BYTES-AVAILABLE(), {&BUFFER_MAX}) NO-ERROR.
     IF ERROR-STATUS:ERROR THEN
     do:
@@ -59,12 +63,15 @@ PROCEDURE ReadSocketResponse:
         def var state as logical.
         state = hSocket:READ(mResponseData, 1, iBytesAvailable, READ-EXACT-NUM) NO-ERROR.
         if state = false then
-          objLogger:writeError(1, "SocketReader: Reading from socket error").
-
+        do:
+          objConn:handleError(1, "SocketReader: Reading from socket error", ?).
+          leave.
+        end.
         
         IF ERROR-STATUS:ERROR THEN DO:
-            objLogger:writeError(1, "SocketReader: Reading from socket").
+            objConn:handleError(1, "SocketReader: Reading from socket error", ?).
             SET-SIZE(mResponseData) = 0.
+            leave.
         END. /* ERROR-STATUS:ERROR */
         ELSE DO: /* ELSE / ERROR-STATUS:ERROR */
         

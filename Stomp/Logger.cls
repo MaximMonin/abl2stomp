@@ -80,4 +80,21 @@ CLASS Stomp.Logger:
           writeLogLC(lcMessage).
         end.
     END METHOD.
+    METHOD PUBLIC VOID dumpErrorFrame(INPUT ipobjFrame AS Stomp.Frame, INPUT ipiErrorLevel AS INT ):
+        DEFINE VARIABLE lcMessage    AS LONGCHAR  NO-UNDO.
+        IF ipiErrorLevel LE iMaxErrorLvl THEN
+        do:
+          ASSIGN lcMessage = STRING(DATETIME(TODAY, MTIME), "99/99/9999 HH:MM:SS.SSS+HH:MM") + " - RAW FRAME DUMP:" + {&NEWLINE} + 
+                            "===================="  + {&NEWLINE} +
+                            ipobjFrame:toLongChar() + {&NEWLINE} +
+                            "===================="  + {&NEWLINE}.
+          writeLogLC(lcMessage).
+        end.
+    END METHOD.
+    METHOD PUBLIC VOID ChangeLevel(
+                              INPUT ipiMaxEntryLvl AS INTEGER,
+                              INPUT ipiMaxErrorLvl AS INTEGER):
+       iMaxEntryLvl = ipiMaxEntryLvl.
+       iMaxErrorLvl = ipiMaxErrorLvl.
+    END METHOD.
 END CLASS.

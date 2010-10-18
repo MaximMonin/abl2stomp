@@ -155,7 +155,7 @@ PROCEDURE ErrorHandler:
 
   /* Dump raw Frame data to log, if available */
   IF ipobjFrame NE ? THEN
-    objLogger:dumpFrame(ipobjFrame).
+    objLogger:dumpErrorFrame(ipobjFrame, ipiErrorLevel).
   
   IF ipiErrorLevel LE 2 THEN
     /* Quit program on severe error */

@@ -108,18 +108,21 @@ CLASS Stomp.Queue:
     METHOD PROTECTED VOID handleError(INPUT ipiErrorLevel AS INTEGER,
                                       INPUT ipcError      AS CHARACTER,
                                       INPUT ipobjFrame    AS Stomp.Frame):
-        /* Write error message to log */
-        objLogger:writeError(ipiErrorLevel, ipcError).
-        /* Dump Frame to log */
-        IF ipobjFrame NE ? THEN
-            objLogger:dumpFrame(INPUT ipobjFrame).
-        /* Throw error up to user-supplied error handling procedure for further action */
+        /* Throw error to user-supplied error handling procedure */
         IF VALID-HANDLE(hErrorProcedurePointer) THEN
             RUN VALUE(cErrorProcedureName) 
                 IN hErrorProcedurePointer
                 (INPUT ipiErrorLevel,
                  INPUT ipcError,
                  INPUT ipobjFrame).
+        ELSE DO:
+          /* Write error message to log */
+          objLogger:writeError(ipiErrorLevel, ipcError).
+          /* Dump Frame to log */
+          IF ipobjFrame NE ? THEN
+             if valid-object(objLogger) then
+              objLogger:dumpErrorFrame(INPUT ipobjFrame, ipiErrorLevel).
+        END.
     END METHOD.
     
     /* Getters */

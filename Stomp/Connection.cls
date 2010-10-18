@@ -81,7 +81,8 @@ CLASS Stomp.Connection:
         IF VALID-HANDLE(hSocketHandlerProcess) THEN
             DELETE OBJECT hSocketHandlerProcess.
 	    /* Destroy socket */
-	    IF VALID-HANDLE(hSocket) THEN DO:
+        IF VALID-HANDLE(hSocket) THEN 
+        DO:
     	    IF hSocket:CONNECTED() THEN
                 hSocket:DISCONNECT().
             DELETE OBJECT hSocket.
@@ -172,6 +173,7 @@ CLASS Stomp.Connection:
             /* Disconnect the socket */
             if valid-object(objLogger) then
               objLogger:writeEntry(1, "Connection " + cServer + ":" + STRING(iPort) + ": Closing socket...").
+            if not valid-handle (hSocket) then RETURN TRUE.
             RETURN hSocket:DISCONNECT().
         END.
         ELSE DO:
@@ -210,6 +212,8 @@ CLASS Stomp.Connection:
 
     /* Wait for socket to have data ready.  Use this method to wait for server responses to sent messages. */
     METHOD PUBLIC VOID waitForSocket(INPUT ipiWaitTime AS INTEGER):
+        if not valid-handle (hSocket) then RETURN.
+
         ASSIGN hSocket:SENSITIVE = TRUE. /* Needed incase ReadSocketResponse procedure is still open on the procedure stack */
         IF SESSION:BATCH-MODE THEN
         do:
@@ -222,7 +226,6 @@ CLASS Stomp.Connection:
             if hSocket:GET-BYTES-AVAILABLE() > 0 then
             do:
               run {&SOCKET_SUB_PROC_NAME} in hSocketHandlerProcess.
-/*              message "!!!" view-as alert-box. */
               leave.
             end.
             if now - t1 > ipiWaitTime * 1000 then leave.
@@ -255,7 +258,14 @@ CLASS Stomp.Connection:
         bufferPosition = 1.
 
         DO WHILE bytesToWrite > 0:
-          hSocket:WRITE(mptrRawFrame, bufferPosition, bytesToWrite).
+          if not valid-handle (hSocket) then LEAVE.
+          hSocket:WRITE(mptrRawFrame, bufferPosition, bytesToWrite) NO-ERROR.
+          if ERROR-STATUS:ERROR or hSocket:BYTES-WRITTEN = 0 then 
+          do:
+            if valid-object(objLogger) then
+              objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": Writing to socket error").
+            leave.
+          end.
           bytesToWrite = bytesToWrite - hSocket:BYTES-WRITTEN.
           bufferPosition = bufferPosition + hSocket:BYTES-WRITTEN.
 
@@ -470,15 +480,9 @@ CLASS Stomp.Connection:
     END METHOD.
     
 
-    METHOD PROTECTED VOID handleError(INPUT ipiErrorLevel AS INTEGER,
+    METHOD PUBLIC VOID handleError(INPUT ipiErrorLevel AS INTEGER,
                                       INPUT ipcError      AS CHARACTER,
                                       INPUT ipobjFrame    AS Stomp.Frame):
-        /* Write error message to log */
-        objLogger:writeError(ipiErrorLevel, ipcError).
-        /* Dump Frame to log */
-        IF ipobjFrame NE ? THEN
-            if valid-object(objLogger) then
-              objLogger:dumpFrame(INPUT ipobjFrame).
         /* Throw error to user-supplied error handling procedure */
         IF VALID-HANDLE(objQueue:getErrorProcessHandle()) THEN
             RUN VALUE(objQueue:getErrorProcessName()) 
@@ -486,6 +490,14 @@ CLASS Stomp.Connection:
                 (INPUT ipiErrorLevel,
                  INPUT ipcError,
                  INPUT ipobjFrame).
+        ELSE DO:
+          /* Write error message to log */
+          objLogger:writeError(ipiErrorLevel, ipcError).
+          /* Dump Frame to log */
+          IF ipobjFrame NE ? THEN
+             if valid-object(objLogger) then
+              objLogger:dumpErrorFrame(INPUT ipobjFrame, ipiErrorLevel).
+        END.
     END METHOD.
     
     /* Getters */
