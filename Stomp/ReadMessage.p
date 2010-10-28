@@ -91,11 +91,13 @@ PROCEDURE ErrorHandler:
   /* Level 3+: Verbose:   Most probably safe to ignore                           */
   
   /* Always log the error info */
-  objLogger:writeError(ipiErrorLevel, ipcError).
+  if valid-object (objLogger) then
+    objLogger:writeError(ipiErrorLevel, ipcError).
 
   /* Dump raw Frame data to log, if available */
   IF ipobjFrame NE ? THEN
-    objLogger:dumpErrorFrame(ipobjFrame, ipiErrorLevel).
+    if valid-object (objLogger) then
+      objLogger:dumpErrorFrame(ipobjFrame, ipiErrorLevel).
 
   IF ipiErrorLevel LE 2 THEN DO:
     /* Quit program on severe error */

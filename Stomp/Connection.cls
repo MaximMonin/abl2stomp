@@ -15,7 +15,7 @@ USING Progress.Lang.*.
 
 &SCOPED-DEFINE SOCKET_HANDLER_LOCATION  Stomp/SocketReader.p
 &SCOPED-DEFINE SOCKET_SUB_PROC_NAME     "ReadSocketResponse"
-&SCOPED-DEFINE SOCKET_WAIT_TIME         15
+&SCOPED-DEFINE SOCKET_WAIT_TIME         30
 
 CLASS Stomp.Connection: 
 	
@@ -237,7 +237,7 @@ CLASS Stomp.Connection:
     
 
     /* Sends a Frame across the socket (doesn't wait for response; calling procedure must do that) */
-    METHOD PUBLIC VOID sendFrame(INPUT ipobjFrame AS Stomp.Frame):
+    METHOD PUBLIC LOGICAL sendFrame(INPUT ipobjFrame AS Stomp.Frame):
         IF isTransactionOpen() THEN
             ipobjFrame:addTransaction(cTransactionID).
         DEFINE VARIABLE mptrRawFrame AS MEMPTR  NO-UNDO.
@@ -273,9 +273,15 @@ CLASS Stomp.Connection:
             objLogger:writeEntry(4, "Bytes written: " + STRING(hSocket:BYTES-WRITTEN)).
 
         END.
-        FINALLY:
-          SET-SIZE(mptrRawFrame) = 0.
-        END FINALLY.    
+        SET-SIZE(mptrRawFrame) = 0.
+
+        if bytesToWrite > 0 then 
+        do:
+          if valid-object(objLogger) then
+            objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": Sending frame error").
+          RETURN FALSE.
+        end.
+        ELSE RETURN TRUE.
     END METHOD.
     
 

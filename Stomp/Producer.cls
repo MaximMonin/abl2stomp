@@ -15,7 +15,7 @@ USING Progress.Lang.*.
 &SCOPED-DEFINE STATUS_READY        0
 &SCOPED-DEFINE STATUS_RECEIPT_WAIT 1
 
-&SCOPED-DEFINE SOCKET_WAIT_TIME    15
+&SCOPED-DEFINE SOCKET_WAIT_TIME    30
 
 CLASS Stomp.Producer INHERITS Stomp.Queue: 
 
@@ -36,6 +36,7 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
 	METHOD PUBLIC LOGICAL send(INPUT iplcData AS LONGCHAR):
 	    /* Create a STOMP Send frame */
         DEFINE VARIABLE objSendFrame AS Stomp.Frame NO-UNDO.
+        define variable sf as logical.
         ASSIGN objSendFrame    = Stomp.FrameFactory:makeSendFrame(INPUT THIS-OBJECT:cDestQueue, INPUT iplcData, INPUT objLogger)
                iStatus         = {&STATUS_RECEIPT_WAIT}
                cReceiptWaiting = objSendFrame:addReceipt()
@@ -43,8 +44,14 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
         objLogger:writeEntry(2, "Producer on " + cDestQueue + ": Sending frame to server and" +
                                 " waiting for a response (receipt = '" + cReceiptWaiting + "')...").
         /* Send the frame */
-        objConnection:sendFrame(objSendFrame).
+        sf = objConnection:sendFrame(objSendFrame).
         DELETE OBJECT objSendFrame.
+        if not sf then
+        do:
+           handleError(1, "Producer on " + cDestQueue + ": Socket communication error", ?).
+           RETURN FALSE.
+        end.
+
         objConnection:waitForSocket({&SOCKET_WAIT_TIME}).
         /* Note: receipt checking is done in processReceipt method */
         IF lReceiptProcOK THEN DO:
@@ -67,6 +74,7 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
                                INPUT ipcTTHdrDataCol AS CHARACTER):
         /* Create a STOMP Send frame */
         DEFINE VARIABLE objSendFrame AS Stomp.Frame NO-UNDO.
+        define variable sf as logical.
         ASSIGN objSendFrame    = Stomp.FrameFactory:makeSendFrame(INPUT THIS-OBJECT:cDestQueue, INPUT iplcData, INPUT objLogger)
                iStatus         = {&STATUS_RECEIPT_WAIT}
                cReceiptWaiting = objSendFrame:addReceipt()
@@ -79,8 +87,13 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
             objLogger:writeEntry(2, "Producer on " + cDestQueue + ": Sending frame to server and" +
                                 " waiting for a response (receipt = '" + cReceiptWaiting + "')...").
             /* Send the frame */
-            objConnection:sendFrame(objSendFrame).
+            sf = objConnection:sendFrame(objSendFrame).
             DELETE OBJECT objSendFrame.
+            if not sf then
+            do:
+              handleError(1, "Producer on " + cDestQueue + ": Socket communication error", ?).
+              RETURN FALSE.
+            end.
             objConnection:waitForSocket({&SOCKET_WAIT_TIME}).
             /* Note: receipt checking is done in processReceipt method */
             IF lReceiptProcOK THEN DO:
@@ -114,6 +127,7 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
         define variable CopyBytes as integer.
         define variable iplcData as LONGCHAR.
         define variable tempbuf as LONGCHAR.
+        define variable sf as logical.
 
         if search(FileName) = ? then RETURN.
         FILE-INFORMATION:FILE-NAME = FileName.
@@ -144,7 +158,11 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
 
           if BytesFrom = 1 and CopyBytes <  FileSize and UseTransaction then
           do:
-            if objConnection:startTransaction (FileName) = false then RETURN FALSE.
+            if objConnection:startTransaction (FileName) = false then 
+            do:
+              handleError(1, "Producer on " + cDestQueue + ": Socket communication error", ?).
+              RETURN FALSE.
+            end.
           end.
 
           DEFINE VARIABLE objSendFrame AS Stomp.Frame NO-UNDO.
@@ -164,8 +182,15 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
               objLogger:writeEntry(2, "Producer on " + cDestQueue + ": Sending frame to server and" +
                                     " waiting for a response (receipt = '" + cReceiptWaiting + "')...").
             /* Send the frame */
-            objConnection:sendFrame(objSendFrame).
+            sf = objConnection:sendFrame(objSendFrame).
             DELETE OBJECT objSendFrame.
+
+            if not sf then
+            do:
+              handleError(1, "Producer on " + cDestQueue + ": Socket communication error", ?).
+              RETURN FALSE.
+            end.
+
             iplcData = "".
             objConnection:waitForSocket({&SOCKET_WAIT_TIME}).
             /* Note: receipt checking is done in processReceipt method */
@@ -205,6 +230,7 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
     /* This method relies on the caller creating the STOMP Frame object manually */
     /* NOTE: Caller should delete Frame object when this method returns!         */
     METHOD PUBLIC LOGICAL send(INPUT ipobjSendFrame AS Stomp.Frame):
+        define variable sf as logical.
         /* Prepare the Frame for sending */
         ASSIGN iStatus = {&STATUS_RECEIPT_WAIT}.
         /* Add a receipt-id, if one is not already defined */
@@ -213,7 +239,12 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
         objLogger:writeEntry(2, "Producer on " + cDestQueue + ": Sending frame to server and" +
                                 " waiting for a response (receipt = '" + cReceiptWaiting + "')...").
         /* Send the frame */
-        objConnection:sendFrame(ipobjSendFrame).
+        sf = objConnection:sendFrame(ipobjSendFrame).
+        if not sf then
+        do:
+          handleError(1, "Producer on " + cDestQueue + ": Socket communication error", ?).
+          RETURN FALSE.
+        end.
         objConnection:waitForSocket({&SOCKET_WAIT_TIME}).
         /* Note: receipt checking is done in processReceipt method */
         IF lReceiptProcOK THEN DO:
