@@ -21,14 +21,11 @@ define variable okflag as logical.
 DEFINE VARIABLE objProducer   AS Stomp.Producer NO-UNDO.
 DEFINE VARIABLE objLogger     AS Stomp.Logger   NO-UNDO.
 
-if search(FileName) = ? then RETURN "ERROR".
-
-FILE-INFORMATION:FILE-NAME = FileName.
-FileSize = FILE-INFORMATION:FILE-SIZE.
-if FileSize = 0 then RETURN "ERROR".
-
-COPY-LOB FROM FILE FileName to bigMessage NO-CONVERT.
-
+if search(FileName) = ? then FileSize = 0.
+else do:
+  FILE-INFORMATION:FILE-NAME = FileName.
+  FileSize = FILE-INFORMATION:FILE-SIZE.
+end.
 
 objLogger   = NEW Stomp.Logger("log/producer.log", /* Log file name */
                                                 2, /* Max logging entry level */

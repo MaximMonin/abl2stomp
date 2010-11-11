@@ -129,10 +129,11 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
         define variable tempbuf as LONGCHAR.
         define variable sf as logical.
 
-        if search(FileName) = ? then RETURN.
-        FILE-INFORMATION:FILE-NAME = FileName.
-        FileSize = FILE-INFORMATION:FILE-SIZE.
-        if FileSize = 0 then RETURN.
+        if search(FileName) = ? then FileSize = 0.
+        else do:
+          FILE-INFORMATION:FILE-NAME = FileName.
+          FileSize = FILE-INFORMATION:FILE-SIZE.
+        end.
 
         FIX-CODEPAGE(tempbuf) = 'UTF-8':U. 
        
@@ -145,16 +146,21 @@ CLASS Stomp.Producer INHERITS Stomp.Queue:
 
           /* if splitting file on chunks it is possible to divide 1 UTF-8 symbol on parts, fixing it */
           define variable i as integer.
-          do i = 1 to 3:
+          if FileSize > 0 then
+          do:
+            do i = 1 to 3:
+              COPY-LOB FROM FILE FileName
+                Starting AT BytesFrom FOR CopyBytes TO tempBuf NO-CONVERT NO-ERROR.
+              if ERROR-STATUS:ERROR = FALSE then leave.
+              CopyBytes = CopyBytes + 1.
+              BytesTo = BytesTo + 1.
+            end.
+            tempBuf = "".
             COPY-LOB FROM FILE FileName
-              Starting AT BytesFrom FOR CopyBytes TO tempBuf NO-CONVERT NO-ERROR.
-            if ERROR-STATUS:ERROR = FALSE then leave.
-            CopyBytes = CopyBytes + 1.
-            BytesTo = BytesTo + 1.
+               Starting AT BytesFrom FOR CopyBytes TO iplcData NO-CONVERT NO-ERROR.
           end.
-          tempBuf = "".
-          COPY-LOB FROM FILE FileName
-              Starting AT BytesFrom FOR CopyBytes TO iplcData NO-CONVERT NO-ERROR.
+          else
+            iplcData = "".
 
           if BytesFrom = 1 and CopyBytes <  FileSize and UseTransaction then
           do:
