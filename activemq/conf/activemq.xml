@@ -105,8 +105,8 @@ It is not optimazed for realtime messaging with a lot small messages.
             http://activemq.apache.org/persistence.html 
         -->
         <persistenceAdapter>
-            <kahaDB directory="${activemq.base}/data/kahadb" indexWriteBatchSize="100" journalMaxFileLength="32mb"
-                    enableIndexWriteAsync="true" />
+            <kahaDB directory="${activemq.base}/data/kahadb" indexWriteBatchSize="100" journalMaxFileLength="32mb" 
+               enableIndexWriteAsync="true" />
         </persistenceAdapter>
         
         
@@ -139,7 +139,7 @@ It is not optimazed for realtime messaging with a lot small messages.
         -->
         <transportConnectors>
             <transportConnector name="openwire" uri="tcp://0.0.0.0:61616"/>
-	    <transportConnector name="stomp"    uri="stomp://0.0.0.0:61613"/>
+	    <transportConnector name="stomp"    uri="stomp://0.0.0.0:61613?keepAlive=true"/>
        	    <transportConnector name="xmpp"     uri="xmpp://0.0.0.0:61222"/>
         </transportConnectors>
 
