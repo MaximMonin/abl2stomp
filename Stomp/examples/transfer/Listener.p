@@ -123,17 +123,34 @@ PROCEDURE MessageHandler:
   define variable filename as character.
   define variable QueryID as character.
   define variable filesize as integer.
+  define variable realfilesize as integer.
   define variable filepart as integer.
   define variable filepartnumb as integer.
   define variable Err as character.
+  define variable Zipped as logical.
+  define variable isBinary as logical.
+  define variable md5 as character.
 
   QueryId  = ipobjFrame:getHeaderValue ("QueryId").
+  if QueryId = ? then QueryId = "".
   filename = ipobjFrame:getHeaderValue ("FileName").
+  if filename = ? then filename = "".
   filesize = INTEGER(ipobjFrame:getHeaderValue ("FileSize")).
+  if filesize = ? then filesize = 0.
+  realfilesize = INTEGER(ipobjFrame:getHeaderValue ("RealFileSize")).
+  if realfilesize = ? then realfilesize = 0.
   filepart = INTEGER(ipobjFrame:getHeaderValue ("FilePart")).
+  if filepart = ? then filepart = 0.
   filepartnumb = INTEGER(ipobjFrame:getHeaderValue ("FilePartNumb")).
+  if filepartnumb = ? then filepartnumb = 0.
+  zipped = LOGICAL(ipobjFrame:getHeaderValue ("Zip")).
+  if zipped = ? then zipped = false.
+  isBinary = LOGICAL(ipobjFrame:getHeaderValue ("Binary")).
+  if isBinary = ? then isBinary = false.
+  md5 = ipobjFrame:getHeaderValue ("MD5").
+  if md5 = ? then md5 = "".
 
-  if filename = ? or filename = "" or QueryId = "" then
+  if filename = "" or QueryId = "" then
     filename = "imp/" + ipobjFrame:getHeaderValue ("message-id").
   else do:
     if INDEX (filename, "/") > 0 then
@@ -143,10 +160,30 @@ PROCEDURE MessageHandler:
   if FilePart = 0 then
   do:
     copy-lob lcMessage to file filename.
-    if filesize <> 0 and filesize <> length (lcMessage) then
+    run ConvertFile (filename, zipped, isBinary).
+    if md5 <> "" then
     do:
-      objLogger:writeError(1, "FileSize = " + STRING(length (lcMessage)) + ", Expected = " + STRING(FileSize) ).
-      Err = "FileSize = " + STRING(length (lcMessage)) + ", Expected = " + STRING(FileSize).
+      run CheckMd5 (filename, md5).
+      if RETURN-VALUE = "ERROR" then
+      do:
+        objLogger:writeError(1, "Md5 sums for source and recieved file are different" ).
+        Err = "File integrity error".
+      end.
+    end.
+    if realfilesize <> 0 then
+    do:
+      if realfilesize <> length (lcMessage) then
+      do:
+        objLogger:writeError(1, "FileSize = " + STRING(length (lcMessage)) + ", Expected = " + STRING(realFileSize) ).
+        Err = "FileSize = " + STRING(length (lcMessage)) + ", Expected = " + STRING(realFileSize).
+      end.
+    end.
+    else do:
+      if filesize <> 0 and filesize <> length (lcMessage) then
+      do:
+        objLogger:writeError(1, "FileSize = " + STRING(length (lcMessage)) + ", Expected = " + STRING(FileSize) ).
+        Err = "FileSize = " + STRING(length (lcMessage)) + ", Expected = " + STRING(FileSize).
+      end.
     end.
     objLogger:writeEntry(1, "Received file: " + FileName + ", Size (" + string(length(lcMessage)) + ")").
     run RegisterFile (QueryId, filename, Err).
@@ -157,8 +194,18 @@ PROCEDURE MessageHandler:
     else
       copy-lob lcMessage to file filename append.
     objLogger:writeEntry(1, "Received file: " + FileName + ", Total :" + string(filepart) +  ", Size (" + string(length(lcMessage)) + ")").
-    if filepart = filesize then
+    if filepart = realfilesize or (realfilesize = 0 and filepart = filesize) then
     do:
+      run ConvertFile (filename, zipped, isBinary).
+      if md5 <> "" then
+      do:
+        run CheckMd5 (filename, md5).
+        if RETURN-VALUE = "ERROR" then
+        do:
+          objLogger:writeError(1, "Md5 sums for source and recieved file are different" ).
+          Err = "File integrity error".
+        end.
+      end.
       FILE-INFORMATION:FILE-NAME = FileName.
       if FileSize <> FILE-INFORMATION:FILE-SIZE then
       do:
@@ -179,7 +226,6 @@ PROCEDURE MessageHandler:
   END.
   
 END PROCEDURE.
-
 
 /* Procedure for handling any errors received from the queue  */
 /* (This gets called by the Stomp framework in case of error) */
@@ -217,6 +263,53 @@ PROCEDURE ErrorHandler:
   END.
 END PROCEDURE.
 
+/* uudecode + unzip incoming file under Linux enviroment */
+PROCEDURE ConvertFile:
+  define input parameter filename as character.
+  define input parameter zipped as logical.
+  define input parameter isbinary as logical.
+
+  define variable realfilename as character.
+  define variable realfilename2 as character.
+
+  if not (zipped = true or isbinary = true) then RETURN.
+
+  realfilename = filename.
+  if zipped then
+    realfilename = realfilename + ".gz".
+  if isBinary then
+  do:
+    realfilename2 = realfilename.
+    realfilename = realfilename + ".uu".
+  end.
+  OS-RENAME VALUE (filename) VALUE (realfilename).
+  if isBinary then
+  do:
+    os-command silent value("uudecode -o " + Realfilename2 + " " + RealFileName ).
+    OS-DELETE VALUE(RealFileName).
+    RealFileName = RealFileName2.
+  end.
+  if zipped then
+  do:
+    os-command silent value("gzip -d " + Realfilename ).
+  end.
+END.
+
+/* Check md5sum for file */
+PROCEDURE CheckMd5:
+  define input parameter filename as character.
+  define input parameter md5 as character.
+
+  define variable md5value as character.
+
+  input through value ("md5sum " + filename).
+  import md5value.
+  input close.
+  if md5value <> md5 then RETURN "ERROR".
+  RETURN "OK".
+end.
+
+
 PROCEDURE RegisterFile:
   define input parameter queryId as character.
   define input parameter filename as character.
@@ -228,6 +321,7 @@ PROCEDURE RegisterFile:
   run src/kernel/rmbufadoc.p.
 
   rid-task = INTEGER(queryId) NO-ERROR.
+  if rid-task = ? then RETURN.
   run src/om/tsk2doc.p ( rid-task, OUTPUT rid-doc).
   if rid-doc = ? then RETURN. /* Task deleted */
 
@@ -238,11 +332,12 @@ PROCEDURE RegisterFile:
     run src/kernel/set_ffv.p ( "Status", rid-doc, "2. Получен файл" ).
     run src/kernel/set_ffv.p ( "File", rid-doc, filename ).
     run src/kernel/set_ffv.p ( "Error", rid-doc, Err ).
-    find first document where document.rid-document = rid-doc EXCLUSIVE-LOCK NO-ERROR.
+    objLogger:writeEntry(1, "-----> Attached file: " + FileName + " to QueryId = " + queryId).  
+
+    find first document where document.rid-document = rid-doc EXCLUSIVE-LOCK NO-WAIT NO-ERROR.
     if available document then
     do:
       run src/kernel/sendevnt.p ( rid-doc, 3). /* Recalc document and update task status */
-      objLogger:writeEntry(1, "-----> Attached file: " + FileName + " to QueryId = " + queryId).  
       release document.
     end.
   end.
