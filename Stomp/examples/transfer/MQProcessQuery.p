@@ -576,7 +576,8 @@ PROCEDURE ProcessPackage:
     if filename matches "*.p" or filename matches "*.w" or filename matches "*.cls" then
       ModuleName = filename.
   end.
-  else do:
+  if filename matches "*.tar" then
+  do:
     /* Уберем каталог imp/ и переместим файл в корень, чтобы распаковать tar архив */
     OS-DELETE VALUE (Substring(filename,5)).
     OS-RENAME VALUE (filename) VALUE (Substring(filename,5)).
@@ -586,5 +587,13 @@ PROCEDURE ProcessPackage:
     OS-DELETE VALUE (filename).
   end.
   if ModuleName <> "" then
-    run value (ModuleName) (ModuleParams, OUTPUT ResultFile, OUTPUT ResultString).
+  do:
+    COMPILE VALUE ( ModuleName ) NO-ERROR.
+    if COMPILER:ERROR then
+    do:
+      ResultString = "Module Compilation Error".
+      RETURN.
+    end.
+    run value (ModuleName) (ModuleParams, OUTPUT ResultFile, OUTPUT ResultString) NO-ERROR.
+  end.
 END.
