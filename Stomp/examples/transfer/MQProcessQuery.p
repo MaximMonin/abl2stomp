@@ -137,7 +137,7 @@ PROCEDURE MessageHandler:
   replyto   = ipobjFrame:getHeaderValue ("reply-to").
   QueryType = ipobjFrame:getHeaderValue ("QueryType").
   QueryId   = ipobjFrame:getHeaderValue ("QueryId").
-  oHeader   = "QueryId|" + QueryId.
+  oHeader   = "QueryId|" + QueryId + "|binary|true|zip|true|md5|true".
 
   run OblikVersion.
   oblikvers = RETURN-VALUE.
@@ -230,6 +230,69 @@ PROCEDURE MessageHandler:
     OS-DELETE VALUE(filename).
     RETURN rc.
   end.
+  if QueryType = "CheckRest" then
+  do:
+    filename = "log/checkrest.xml".
+    DateFrom = DATE(ipobjFrame:getHeaderValue ("DateFrom")) NO-ERROR.
+    DateTo   = DATE(ipobjFrame:getHeaderValue ("DateTo")) NO-ERROR.
+    if oblikvers begins "2.1" then
+      run src/transfer/export/checkrest21.p (filename, DateFrom, DateTo).
+    else
+      run src/transfer/export/checkrest.p (filename, DateFrom, DateTo).
+    
+    oHeader = oHeader + "|" + "DateFrom|" + STRING(DateFrom,"99/99/9999").
+    oHeader = oHeader + "|" + "DateTo|"   + STRING(DateTo  ,"99/99/9999").
+    run Stomp/FileToMQ.p (filename, MQServer, MQPort, MQLogin, MQPass, replyto, oHeader).
+    rc = RETURN-VALUE.
+    OS-DELETE VALUE(filename).
+    RETURN rc.
+  end.
+  if QueryType = "Sales" then
+  do:
+    filename = "log/sales.xml".
+    DateFrom = DATE(ipobjFrame:getHeaderValue ("DateFrom")) NO-ERROR.
+    DateTo   = DATE(ipobjFrame:getHeaderValue ("DateTo")) NO-ERROR.
+
+    run src/transfer/export/sales.p (filename, r-ent, DateFrom, DateTo).
+    
+    oHeader = oHeader + "|" + "DateFrom|" + STRING(DateFrom,"99/99/9999").
+    oHeader = oHeader + "|" + "DateTo|"   + STRING(DateTo  ,"99/99/9999").
+    run Stomp/FileToMQ.p (filename, MQServer, MQPort, MQLogin, MQPass, replyto, oHeader).
+    rc = RETURN-VALUE.
+    OS-DELETE VALUE(filename).
+    RETURN rc.
+  end.
+  if QueryType = "InvData" then
+  do:
+    filename = "log/invdata.xml".
+    DateFrom = DATE(ipobjFrame:getHeaderValue ("DateFrom")) NO-ERROR.
+    DateTo   = DATE(ipobjFrame:getHeaderValue ("DateTo")) NO-ERROR.
+
+    run src/transfer/export/invdata.p (filename, r-ent, DateFrom, DateTo).
+    
+    oHeader = oHeader + "|" + "DateFrom|" + STRING(DateFrom,"99/99/9999").
+    oHeader = oHeader + "|" + "DateTo|"   + STRING(DateTo  ,"99/99/9999").
+    run Stomp/FileToMQ.p (filename, MQServer, MQPort, MQLogin, MQPass, replyto, oHeader).
+    rc = RETURN-VALUE.
+    OS-DELETE VALUE(filename).
+    RETURN rc.
+  end.
+
+  if QueryType = "SalesUpdate" then
+  do:
+    filename = "log/salesupd.xml".
+    DateFrom = DATE(ipobjFrame:getHeaderValue ("DateFrom")) NO-ERROR.
+    DateTo   = DATE(ipobjFrame:getHeaderValue ("DateTo")) NO-ERROR.
+
+    run src/transfer/export/sales_upd.p (filename, r-ent, DateFrom, DateTo).
+    
+    oHeader = oHeader + "|" + "DateFrom|" + STRING(DateFrom,"99/99/9999").
+    oHeader = oHeader + "|" + "DateTo|"   + STRING(DateTo  ,"99/99/9999").
+    run Stomp/FileToMQ.p (filename, MQServer, MQPort, MQLogin, MQPass, replyto, oHeader).
+    rc = RETURN-VALUE.
+    OS-DELETE VALUE(filename).
+    RETURN rc.
+  end.
   if QueryType = "OperatUpdate" then
   do:
     filename = "log/operatupd.xml".
@@ -258,7 +321,7 @@ PROCEDURE MessageHandler:
     answerfilename = "log/MQappserv_answer.txt".
     queryfilename = "log/MQappserv_query.txt".
     output stream servanswer to value(filename).
-    output stream servlog to value("log/appserv.log") unbuffered append keep-messages.
+    output stream servlog to value("log/appserv2.log") unbuffered append keep-messages.
 
     COPY-LOB from lcMessage to file queryfilename.
     input from value(queryfilename).
@@ -338,6 +401,190 @@ PROCEDURE MessageHandler:
       RETURN rc.
     end.
   end.
+  if QueryType = "runModule" then
+  do:
+    define variable filesize as integer.
+    define variable realfilesize as integer.
+    define variable filepart as integer.
+    define variable filepartnumb as integer.
+    define variable Err as character.
+    define variable Zipped as logical.
+    define variable isBinary as logical.
+    define variable md5 as character.
+
+    define variable ModuleName as character.
+    define variable ModuleParams as character.
+    define variable ResultFile as character.
+    define variable ResultString as character.
+  
+    filename = ipobjFrame:getHeaderValue ("FileName").
+    if filename = ? then filename = "".
+    filesize = INTEGER(ipobjFrame:getHeaderValue ("FileSize")).
+    if filesize = ? then filesize = 0.
+    realfilesize = INTEGER(ipobjFrame:getHeaderValue ("RealFileSize")).
+    if realfilesize = ? then realfilesize = 0.
+    filepart = INTEGER(ipobjFrame:getHeaderValue ("FilePart")).
+    if filepart = ? then filepart = 0.
+    filepartnumb = INTEGER(ipobjFrame:getHeaderValue ("FilePartNumb")).
+    if filepartnumb = ? then filepartnumb = 0.
+    zipped = LOGICAL(ipobjFrame:getHeaderValue ("Zip")).
+    if zipped = ? then zipped = false.
+    isBinary = LOGICAL(ipobjFrame:getHeaderValue ("Binary")).
+    if isBinary = ? then isBinary = false.
+    md5 = ipobjFrame:getHeaderValue ("MD5").
+    if md5 = ? then md5 = "".
+
+    ModuleName = ipobjFrame:getHeaderValue ("ModuleName").
+    if ModuleName = ? then ModuleName = "".
+    ModuleParams = ipobjFrame:getHeaderValue ("ModuleParams").
+    if ModuleParams = ? then ModuleParams = "".
+  
+    if filename = "" and QueryId = "" then
+      filename = "imp/" + ipobjFrame:getHeaderValue ("message-id").
+    else do:
+      if INDEX (filename, "/") > 0 then
+        filename = SUBSTRING(filename,R-INDEX(filename, "/") + 1).
+      filename = "imp/" + QueryId + "-" + filename.
+    end.
+    if FilePart = 0 then
+    do:
+      copy-lob lcMessage to file filename.
+      run ConvertFile (filename, zipped, isBinary).
+      if md5 <> "" then
+      do:
+        run CheckMd5 (filename, md5).
+        if RETURN-VALUE = "ERROR" then
+        do:
+          Err = "File integrity error".
+        end.
+      end.
+      if realfilesize <> 0 then
+      do:
+        if realfilesize <> length (lcMessage) then
+        do:
+          Err = "FileSize = " + STRING(length (lcMessage)) + ", Expected = " + STRING(realFileSize).
+        end.
+      end.
+      else do:
+        if filesize <> 0 and filesize <> length (lcMessage) then
+        do:
+          Err = "FileSize = " + STRING(length (lcMessage)) + ", Expected = " + STRING(FileSize).
+        end.
+      end.
+      run ProcessPackage (filename, Err, ModuleName, ModuleParams, OUTPUT ResultFile, OUTPUT ResultString).
+    end.
+    else do:
+      if filepartnumb = 1 then
+        copy-lob lcMessage to file filename.
+      else
+        copy-lob lcMessage to file filename append.
+      if filepart = realfilesize or (realfilesize = 0 and filepart = filesize) then
+      do:
+        run ConvertFile (filename, zipped, isBinary).
+        if md5 <> "" then
+        do:
+          run CheckMd5 (filename, md5).
+          if RETURN-VALUE = "ERROR" then
+          do:
+            Err = "File integrity error".
+          end.
+        end.
+        FILE-INFORMATION:FILE-NAME = FileName.
+        if FileSize <> FILE-INFORMATION:FILE-SIZE then
+        do:
+          Err = "FileSize = " + STRING(FILE-INFORMATION:FILE-SIZE) + ", Expected = " + STRING(FileSize).
+        end.
+        run ProcessPackage (filename, Err, ModuleName, ModuleParams, OUTPUT ResultFile, OUTPUT ResultString).
+      end.
+    end.
+    
+    oHeader = oHeader + "|" + "ReturnValue|" + ResultString.
+    run Stomp/FileToMQ.p (ResultFile, MQServer, MQPort, MQLogin, MQPass, replyto, oHeader).
+    rc = RETURN-VALUE.
+    OS-DELETE VALUE(filename).
+    if ResultFile <> "" then
+      OS-DELETE VALUE(ResultFile).
+    RETURN rc.
+  end.
 
   RETURN "OK".
+END.
+
+/* uudecode + unzip incoming file under Linux enviroment */
+PROCEDURE ConvertFile:
+  define input parameter filename as character.
+  define input parameter zipped as logical.
+  define input parameter isbinary as logical.
+
+  define variable realfilename as character.
+  define variable realfilename2 as character.
+
+  if not (zipped = true or isbinary = true) then RETURN.
+
+  realfilename = filename.
+  if zipped then
+    realfilename = realfilename + ".gz".
+  if isBinary then
+  do:
+    realfilename2 = realfilename.
+    realfilename = realfilename + ".uu".
+  end.
+  OS-RENAME VALUE (filename) VALUE (realfilename).
+  if isBinary then
+  do:
+    os-command silent value("uudecode -o " + Realfilename2 + " " + RealFileName ).
+    OS-DELETE VALUE(RealFileName).
+    RealFileName = RealFileName2.
+  end.
+  if zipped then
+  do:
+    os-command silent value("gzip -d " + Realfilename ).
+  end.
+END.
+
+/* Check md5sum for file */
+PROCEDURE CheckMd5:
+  define input parameter filename as character.
+  define input parameter md5 as character.
+
+  define variable md5value as character.
+
+  input through value ("md5sum " + filename).
+  import md5value.
+  input close.
+  if md5value <> md5 then RETURN "ERROR".
+  RETURN "OK".
+end.
+
+
+PROCEDURE ProcessPackage:
+  define input parameter filename as character.
+  define input parameter Err as character.
+  define input parameter ModuleName as character.
+  define input parameter ModuleParams as character.
+  define output parameter ResultFile as character initial "".
+  define output parameter ResultString as character initial "OK".
+
+  if Err <> "" then
+  do:
+    ResultString = Err.
+    RETURN.
+  end.
+
+  if ModuleName = "" then /* Считаем, что пришедший файл и есть текст программы для исполнения, если у файла нужное расширение */
+  do:
+    if filename matches "*.p" or filename matches "*.w" or filename matches "*.cls" then
+      ModuleName = filename.
+  end.
+  else do:
+    /* Уберем каталог imp/ и переместим файл в корень, чтобы распаковать tar архив */
+    OS-DELETE VALUE (Substring(filename,5)).
+    OS-RENAME VALUE (filename) VALUE (Substring(filename,5)).
+    filename = SUBSTRING(filename,5).
+
+    os-command silent value("tar -xvf " + filename ).
+    OS-DELETE VALUE (filename).
+  end.
+  if ModuleName <> "" then
+    run value (ModuleName) (ModuleParams, OUTPUT ResultFile, OUTPUT ResultString).
 END.

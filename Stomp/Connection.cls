@@ -137,6 +137,7 @@ CLASS Stomp.Connection:
                 END.
                 ELSE DO:
                     /* Handle STOMP connect refused/time-out */
+                  if valid-object(objLogger) then
                     objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": STOMP connect refused by server or has " +
                                             "timed out after {&SOCKET_WAIT_TIME} second wait. Try connection again later.").
                     RETURN FALSE.
@@ -144,6 +145,7 @@ CLASS Stomp.Connection:
             END.
             ELSE DO:
                 /* Socket connection failed */
+              if valid-object(objLogger) then
                 objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": Unable to connect to socket! Reason:" +
                                         " '" + ERROR-STATUS:GET-MESSAGE(1) + "'").
                 RETURN FALSE.
@@ -151,6 +153,7 @@ CLASS Stomp.Connection:
         END.
         ELSE DO:
             /* Connection already connected - connect() call denied */
+          if valid-object(objLogger) then
             objLogger:writeError(1, "Connection " + cServer + ":" + STRING(iPort) + ": Unable to connect! Reason:" +
                                     " the Connection object has already been connected! You must call disconnect() before re-connecting.").
             RETURN FALSE.

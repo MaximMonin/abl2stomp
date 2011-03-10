@@ -130,9 +130,12 @@ PROCEDURE MessageHandler:
   define variable Zipped as logical.
   define variable isBinary as logical.
   define variable md5 as character.
+  define variable ReturnValue as character.
 
   QueryId  = ipobjFrame:getHeaderValue ("QueryId").
   if QueryId = ? then QueryId = "".
+  ReturnValue  = ipobjFrame:getHeaderValue ("ReturnValue").
+  if ReturnValue = ? then ReturnValue = "".
   filename = ipobjFrame:getHeaderValue ("FileName").
   if filename = ? then filename = "".
   filesize = INTEGER(ipobjFrame:getHeaderValue ("FileSize")).
@@ -150,7 +153,7 @@ PROCEDURE MessageHandler:
   md5 = ipobjFrame:getHeaderValue ("MD5").
   if md5 = ? then md5 = "".
 
-  if filename = "" or QueryId = "" then
+  if filename = "" and QueryId = "" then
     filename = "imp/" + ipobjFrame:getHeaderValue ("message-id").
   else do:
     if INDEX (filename, "/") > 0 then
@@ -186,7 +189,7 @@ PROCEDURE MessageHandler:
       end.
     end.
     objLogger:writeEntry(1, "Received file: " + FileName + ", Size (" + string(length(lcMessage)) + ")").
-    run RegisterFile (QueryId, filename, Err).
+    run RegisterFile (QueryId, filename, Err, ReturnValue).
   end.
   else do:
     if filepartnumb = 1 then
@@ -212,7 +215,7 @@ PROCEDURE MessageHandler:
         objLogger:writeError(1, "FileSize = " + STRING(FILE-INFORMATION:FILE-SIZE) + ", Expected = " + STRING(FileSize) ).
         Err = "FileSize = " + STRING(FILE-INFORMATION:FILE-SIZE) + ", Expected = " + STRING(FileSize).
       end.
-      run RegisterFile (QueryId, filename, Err).
+      run RegisterFile (QueryId, filename, Err, ReturnValue).
     end.
   end.
   
@@ -314,16 +317,57 @@ PROCEDURE RegisterFile:
   define input parameter queryId as character.
   define input parameter filename as character.
   define input parameter Err as character.
+  define input parameter ReturnValue as character.
 
   define variable rid-task as integer.
   define variable rid-doc as integer.
+  define variable ident as character.
+  define variable rident as integer.
+  define variable tpdoc as integer.
+  define variable rows as integer.
+  define variable j as integer.
 
   run src/kernel/rmbufadoc.p.
 
-  rid-task = INTEGER(queryId) NO-ERROR.
+  if INDEX (queryid, "_") > 0 then /* ridtask_oblikxxx */
+  do:
+    rid-task = INTEGER(ENTRY(1,queryId,"_")).
+    ident = SUBSTRING(queryId, LENGTH(ENTRY(1,queryId,"_")) + 2 ).
+    find first ent where ent.id-ent = ident NO-LOCK NO-ERROR.
+    if available ent then rident = ent.rid-ent.
+  end.
+  else
+    rid-task = INTEGER(queryId) NO-ERROR.
+
   if rid-task = ? then RETURN.
   run src/om/tsk2doc.p ( rid-task, OUTPUT rid-doc).
   if rid-doc = ? then RETURN. /* Task deleted */
+
+  run src/kernel/doc2tp.p (rid-doc, output tpdoc).
+  if tpdoc = 55 then /* Запросы на выполнение модулей */
+  do:
+    run src/kernel/get_tr.p ( 2, rid-doc, OUTPUT rows ).
+    do j = 1 to rows :
+      run src/kernel/get_ftv.p ( "Ent", rid-doc, j ).
+      if RidEnt = INTEGER(RETURN-VALUE) then
+      do:
+        run src/kernel/set_ftv.p ( "Status", rid-doc, j, "2. Получен файл" ).
+        run src/kernel/set_ftv.p ( "File", rid-doc, j, filename ).
+        run src/kernel/set_ftv.p ( "ResultValue", rid-doc, j, ReturnValue ).
+      end.
+    end.
+    run src/kernel/set_ffv.p ( "Error", rid-doc, Err ).
+    if filename <> "" then
+      objLogger:writeEntry(1, "-----> Attached file: " + FileName + " to QueryId = " + queryId).  
+
+    find first document where document.rid-document = rid-doc EXCLUSIVE-LOCK NO-WAIT NO-ERROR.
+    if available document then
+    do:
+      run src/kernel/sendevnt.p ( rid-doc, 3). /* Recalc document and update task status */
+      release document.
+    end.
+    RETURN.
+  end.
 
   /* change document data and change task status */
   run src/kernel/get_ffv.p ( "Status", rid-doc ).
