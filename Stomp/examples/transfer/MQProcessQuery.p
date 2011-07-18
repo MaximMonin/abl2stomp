@@ -198,6 +198,16 @@ PROCEDURE MessageHandler:
     OS-DELETE VALUE(filename).
     RETURN rc.
   end.
+  if QueryType = "Filials" then
+  do:
+    filename = "log/fildata.xml".
+    run src/transfer/export/filialdata.p (filename).
+    
+    run Stomp/FileToMQ.p (filename, MQServer, MQPort, MQLogin, MQPass, replyto, oHeader).
+    rc = RETURN-VALUE.
+    OS-DELETE VALUE(filename).
+    RETURN rc.
+  end.
   if QueryType = "Rest" then
   do:
     filename = "log/rest.xml".
