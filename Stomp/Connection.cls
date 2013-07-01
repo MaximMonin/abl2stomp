@@ -232,7 +232,10 @@ CLASS Stomp.Connection:
               leave.
             end.
             if now - t1 > ipiWaitTime * 1000 then leave.
-            pause 1 no-message.
+
+            /* Optimization for fast connect/answer if reply time < 1sec */
+            if now - t1 > 1000 then 
+              pause 1 no-message.
           end.
         end.
 
