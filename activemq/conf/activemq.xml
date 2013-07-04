@@ -14,6 +14,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 -->
+<!-- START SNIPPET: example -->
 <beans
   xmlns="http://www.springframework.org/schema/beans"
   xmlns:amq="http://activemq.apache.org/schema/core"
@@ -37,11 +38,11 @@ It is not optimazed for realtime messaging with a lot small messages.
     <!-- 
         The <broker> element is used to configure the ActiveMQ broker. 
     -->
-    <broker xmlns="http://activemq.apache.org/schema/core" brokerName="localhost" dataDirectory="${activemq.base}/data" 
-         persistent="true" useShutdownHook="false" advisorySupport="false">
-
-    <plugins>
+    <broker xmlns="http://activemq.apache.org/schema/core" brokerName="localhost" dataDirectory="${activemq.base}/data" destroyApplicationContextOnStop="true">
+ 
         <!-- Configure authentication; Username, passwords and groups -->
+<!--
+    <plugins>
         <simpleAuthenticationPlugin>
             <users>
                 <authenticationUser username="system" password="manager"
@@ -51,8 +52,7 @@ It is not optimazed for realtime messaging with a lot small messages.
             </users>
         </simpleAuthenticationPlugin>
     </plugins>
-
- 
+    -->
         <!--
 			For better performances use VM cursor and small memory limit.
 			For more information, see:
@@ -63,28 +63,35 @@ It is not optimazed for realtime messaging with a lot small messages.
             For more information, see:
             http://activemq.apache.org/producer-flow-control.html
         -->
-
+              
         <destinationPolicy>
             <policyMap>
               <policyEntries>
                 <policyEntry topic=">" producerFlowControl="false" lazyDispatch="true">
                   <dispatchPolicy>
-                    <strictOrderDispatchPolicy />
+                      <strictOrderDispatchPolicy />
                   </dispatchPolicy>
-        <!-- 
+                  <!--
                   <pendingSubscriberPolicy>
-            	    <vmCursor />
+                    <vmCursor />
                   </pendingSubscriberPolicy>
-                  <pendingDurableSubscriberPolicy>
-                    <fileDurableSubscriberCursor />
-                  </pendingDurableSubscriberPolicy>
-        -->
+                  -->
                 </policyEntry>
                 <policyEntry queue=">" producerFlowControl="false">
+                  <!-- Use VM cursor for better latency
+                       For more information, see:
+                       
+                       http://activemq.apache.org/message-cursors.html
+                       
+                  <pendingQueuePolicy>
+                    <vmQueueCursor/>
+                  </pendingQueuePolicy>
+                  -->
                 </policyEntry>
               </policyEntries>
             </policyMap>
         </destinationPolicy> 
+ 
         
         <!-- 
             The managementContext is used to configure how ActiveMQ is exposed in 
@@ -104,19 +111,19 @@ It is not optimazed for realtime messaging with a lot small messages.
             
             http://activemq.apache.org/persistence.html 
         -->
+
+        <!--
+        <persistenceAdapter>
+            <kahaDB directory="${activemq.base}/data/kahadb"/>
+        </persistenceAdapter>
+        -->
+
         <persistenceAdapter>
             <kahaDB directory="${activemq.base}/data/kahadb" indexWriteBatchSize="100" journalMaxFileLength="32mb" 
                enableIndexWriteAsync="true" />
         </persistenceAdapter>
         
-        
-          <!--
-            The systemUsage controls the maximum amount of space the broker will 
-            use before slowing down producers. For more information, see:
-            
-            http://activemq.apache.org/producer-flow-control.html
-		-->
-             
+
         <systemUsage>
             <systemUsage sendFailIfNoSpace="true">
                 <memoryUsage>
@@ -130,6 +137,28 @@ It is not optimazed for realtime messaging with a lot small messages.
                 </tempUsage>
             </systemUsage>
         </systemUsage>
+
+
+          <!--
+            The systemUsage controls the maximum amount of space the broker will 
+            use before slowing down producers. For more information, see:
+            
+            http://activemq.apache.org/producer-flow-control.html
+             
+        <systemUsage>
+            <systemUsage>
+                <memoryUsage>
+                    <memoryUsage limit="20 mb"/>
+                </memoryUsage>
+                <storeUsage>
+                    <storeUsage limit="1 gb"/>
+                </storeUsage>
+                <tempUsage>
+                    <tempUsage limit="100 mb"/>
+                </tempUsage>
+            </systemUsage>
+        </systemUsage>
+		-->
 		  
         <!-- 
             The transport connectors expose ActiveMQ over a given protocol to
@@ -146,16 +175,11 @@ It is not optimazed for realtime messaging with a lot small messages.
     </broker>
 
     <!-- 
-        Uncomment to enable Camel
-        Take a look at activemq-camel.xml for more details
-         
-    <import resource="camel.xml"/>
-    -->
-
-    <!-- 
         Enable web consoles, REST and Ajax APIs and demos
-        Take a look at activemq-jetty.xml for more details 
+        
+        Take a look at ${ACTIVEMQ_HOME}/conf/jetty.xml for more details 
     -->
     <import resource="jetty.xml"/>
     
 </beans>
+<!-- END SNIPPET: example -->
