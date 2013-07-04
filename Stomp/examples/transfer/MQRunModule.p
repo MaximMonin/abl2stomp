@@ -9,12 +9,13 @@ define variable HeaderInfo as character.
 
 HeaderInfo = "persistent|true|QueryType|runModule|binary|true|zip|true".
 
-if replyto = "" then replyto = "/topic/cwh.data".
 if QueryId = "" then QueryId = "0".
 HeaderInfo = HeaderInfo + "|reply-to|" + replyto + "|QueryId|" + QueryId.
 
 if ModuleFile <> "" then
-  HeaderInfo = HeaderInfo + "|ModuleName|" + ModuleFile + "|ModuleParams|" + ModuleParams.
+  HeaderInfo = HeaderInfo + "|ModuleName|" + ModuleFile.
+if ModuleParams <> "" then
+  HeaderInfo = HeaderInfo + "|ModuleParams|" + ModuleParams.
 run SendQuery (qname,PacketFile, HeaderInfo).
 RETURN RETURN-VALUE.
 

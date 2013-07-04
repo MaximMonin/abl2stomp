@@ -38,7 +38,7 @@ PROCEDURE ReadSocketResponse:
   DEFINE VARIABLE iResponseLength    AS INTEGER   NO-UNDO.
 
   if not valid-handle (hSocket) then RETURN.
-  if SESSION:BATCH then
+  if SESSION:BATCH-MODE then
     hSocket:SENSITIVE = NO.
   ERROR-STATUS:ERROR = NO.
 
