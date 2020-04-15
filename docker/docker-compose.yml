@@ -1,0 +1,24 @@
+version: '3'
+
+services:
+  web:
+    image: 'rmohr/activemq'
+    restart: always
+    container_name: activemq
+    ports:
+      - '61613:61613'
+      - '61616:61616'
+      - '8161:8161'
+    volumes:
+      - './config:/opt/activemq/conf'
+      - './data:/opt/activemq/data'
+    networks:
+      default:
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "false"
+    ipam:
+      driver: default
